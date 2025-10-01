@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merchant Two - Supply Chain Management Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #e74c3c;
+        }
+
+        .controls {
+            padding: 30px;
+            background: white;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .search-box {
+            width: 100%;
+            max-width: 400px;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .search-box:focus {
+            border-color: #e74c3c;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            background: #c0392b;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-success {
+            background: #28a745;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .table-container {
+            padding: 30px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 14px;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .editable {
+            background: #fff3cd;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .editable:hover {
+            background: #ffeaa7;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 95%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 5px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: #e74c3c;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .form-row-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+            color: #6c757d;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        .profit-positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .profit-negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .status-active {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .status-inactive {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .quality-high {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .quality-medium {
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .quality-low {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 0;
+                border-radius: 0;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr 1fr;
+                padding: 20px;
+            }
+            
+            .table-container {
+                padding: 15px;
+            }
+            
+            th, td {
+                padding: 8px;
+                font-size: 12px;
+            }
+            
+            .form-row, .form-row-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🏢 Merchant Two Dashboard</h1>
+            <p>Advanced Supply Chain Analytics & Product Management</p>
+        </div>
+
+        <!-- Statistics Dashboard -->
+        <div class="stats" id="statsContainer">
+            <div class="stat-card">
+                <h3>Total Products</h3>
+                <div class="value" id="totalProducts">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Revenue</h3>
+                <div class="value" id="totalRevenue">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Average Price</h3>
+                <div class="value" id="avgPrice">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Product Categories</h3>
+                <div class="value" id="productTypes">-</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <input type="text" id="searchBox" class="search-box" placeholder="🔍 Search by Product ID, category, vendor, or location...">
+            <button class="btn" onclick="refreshData()">🔄 Refresh Data</button>
+            <button class="btn btn-success" onclick="addNewProduct()">➕ Add New Product</button>
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-container">
+            <div id="loading" class="loading">Loading data...</div>
+            <div id="error" class="error" style="display: none;"></div>
+            
+            <table id="dataTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Product ID</th>
+                        <th>Category</th>
+                        <th>Price ($)</th>
+                        <th>Units Sold</th>
+                        <th>Revenue ($)</th>
+                        <th>Stock Level</th>
+                        <th>Status</th>
+                        <th>Vendor</th>
+                        <th>Location</th>
+                        <th>Quality Score</th>
+                        <th>Net Profit ($)</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><span id="modalTitle">Edit Product</span>: <span id="editProductID"></span></h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <form id="editForm">
+                <!-- Product Information -->
+                <h3 style="color: #e74c3c; margin-bottom: 15px;">📦 Product Information</h3>
+                <div class="form-row" id="productIdRow" style="display: none;">
+                    <div class="form-group">
+                        <label>Product ID:</label>
+                        <input type="text" id="editProductIDInput" required>
+                    </div>
+                    <div class="form-group">
+                        <!-- Empty for spacing -->
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Category:</label>
+                        <select id="editCategory" required>
+                            <option value="cosmetics">Cosmetics</option>
+                            <option value="skincare">Skincare</option>
+                            <option value="haircare">Haircare</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Unit Price ($):</label>
+                        <input type="number" id="editUnitPrice" step="0.01" min="0" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Units Sold:</label>
+                        <input type="number" id="editUnitsSold" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Sales Revenue ($):</label>
+                        <input type="number" id="editSalesRevenue" step="0.01" min="0" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Profit Margin (%):</label>
+                        <input type="number" id="editProfitMargin" step="0.1" min="0" max="100" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Stock Level:</label>
+                        <input type="number" id="editStockLevel" min="0" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Product Status:</label>
+                        <select id="editProductStatus" required>
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                            <option value="Discontinued">Discontinued</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Seasonal Demand:</label>
+                        <select id="editSeasonalDemand" required>
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Supply Chain Information -->
+                <h3 style="color: #e74c3c; margin: 25px 0 15px 0;">🚚 Supply Chain Information</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Vendor Name:</label>
+                        <select id="editVendorName" required>
+                            <option value="Supplier 1">Supplier 1</option>
+                            <option value="Supplier 2">Supplier 2</option>
+                            <option value="Supplier 3">Supplier 3</option>
+                            <option value="Supplier 4">Supplier 4</option>
+                            <option value="Supplier 5">Supplier 5</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Facility Location:</label>
+                        <select id="editFacilityLocation" required>
+                            <option value="Mumbai">Mumbai</option>
+                            <option value="Delhi">Delhi</option>
+                            <option value="Bangalore">Bangalore</option>
+                            <option value="Chennai">Chennai</option>
+                            <option value="Kolkata">Kolkata</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label>Processing Days:</label>
+                        <input type="number" id="editProcessingDays" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Output Quantity:</label>
+                        <input type="number" id="editOutputQuantity" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Production Expenses ($):</label>
+                        <input type="number" id="editProductionExpenses" step="0.01" min="0" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Logistics Provider:</label>
+                        <select id="editLogisticsProvider" required>
+                            <option value="Carrier A">Carrier A</option>
+                            <option value="Carrier B">Carrier B</option>
+                            <option value="Carrier C">Carrier C</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Shipping Method:</label>
+                        <select id="editShippingMethod" required>
+                            <option value="Road">Road</option>
+                            <option value="Air">Air</option>
+                            <option value="Sea">Sea</option>
+                            <option value="Rail">Rail</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label>Freight Charges ($):</label>
+                        <input type="number" id="editFreightCharges" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Quality Score (1-10):</label>
+                        <input type="number" id="editQualityScore" step="0.1" min="1" max="10" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Reorder Point:</label>
+                        <input type="number" id="editReorderPoint" min="0" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Warehouse Zone:</label>
+                        <select id="editWarehouseZone" required>
+                            <option value="Zone-A">Zone-A</option>
+                            <option value="Zone-B">Zone-B</option>
+                            <option value="Zone-C">Zone-C</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Sustainability Index (0-100):</label>
+                        <input type="number" id="editSustainabilityIndex" min="0" max="100" required>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px;">
+                    <button type="submit" class="btn btn-success">💾 Save Changes</button>
+                    <button type="button" class="btn" onclick="closeModal()">❌ Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let allData = [];
+        let filteredData = [];
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+            loadStats();
+            
+            // Add search functionality
+            document.getElementById('searchBox').addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                filterData(searchTerm);
+            });
+        });
+
+        // Load main data
+        async function loadData() {
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('dataTable').style.display = 'none';
+
+                const response = await fetch('/api/products');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                allData = await response.json();
+                filteredData = [...allData];
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('dataTable').style.display = 'table';
+                
+                renderTable(filteredData);
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = `Failed to load data: ${error.message}`;
+            }
+        }
+
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const stats = await response.json();
+                
+                document.getElementById('totalProducts').textContent = stats.totalProducts[0].count;
+                document.getElementById('totalRevenue').textContent = '$' + stats.totalRevenue[0].total.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                document.getElementById('avgPrice').textContent = '$' + stats.avgPrice[0].avg.toFixed(2);
+                document.getElementById('productTypes').textContent = stats.productTypes.length;
+                
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Render data table
+        function renderTable(data) {
+            const tbody = document.getElementById('dataTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                
+                const netProfit = item.net_profit || 0;
+                const profitClass = netProfit >= 0 ? 'profit-positive' : 'profit-negative';
+                const statusClass = item.product_status === 'Active' ? 'status-active' : 'status-inactive';
+                
+                let qualityClass = 'quality-medium';
+                if (item.quality_score >= 8.5) qualityClass = 'quality-high';
+                else if (item.quality_score < 7.5) qualityClass = 'quality-low';
+
+                row.innerHTML = `
+                    <td>${item.product_id}</td>
+                    <td>${item.category}</td>
+                    <td>$${parseFloat(item.unit_price).toFixed(2)}</td>
+                    <td>${parseInt(item.units_sold).toLocaleString()}</td>
+                    <td>$${parseFloat(item.sales_revenue).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                    <td>${item.stock_level}</td>
+                    <td class="${statusClass}">${item.product_status}</td>
+                    <td>${item.vendor_name || 'N/A'}</td>
+                    <td>${item.facility_location || 'N/A'}</td>
+                    <td class="${qualityClass}">${item.quality_score ? parseFloat(item.quality_score).toFixed(1) : 'N/A'}</td>
+                    <td class="${profitClass}">$${parseFloat(netProfit).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                    <td>
+                        <button class="btn" onclick="editProduct('${item.product_id}')">✏️ Edit</button>
+                        <button class="btn btn-danger" onclick="deleteProduct('${item.product_id}')">🗑️ Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Filter data based on search term
+        function filterData(searchTerm) {
+            if (!searchTerm) {
+                filteredData = [...allData];
+            } else {
+                filteredData = allData.filter(item => 
+                    item.product_id.toLowerCase().includes(searchTerm) ||
+                    item.category.toLowerCase().includes(searchTerm) ||
+                    (item.vendor_name && item.vendor_name.toLowerCase().includes(searchTerm)) ||
+                    (item.facility_location && item.facility_location.toLowerCase().includes(searchTerm)) ||
+                    item.product_status.toLowerCase().includes(searchTerm)
+                );
+            }
+            renderTable(filteredData);
+        }
+
+        // Add new product
+        function addNewProduct() {
+            // Clear all form fields
+            document.getElementById('editForm').reset();
+            
+            // Show modal in create mode
+            document.getElementById('modalTitle').textContent = 'Add New Product';
+            document.getElementById('editProductID').textContent = '';
+            document.getElementById('productIdRow').style.display = 'grid';
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        // Edit product
+        function editProduct(productId) {
+            const product = allData.find(p => p.product_id === productId);
+            if (!product) return;
+
+            // Show modal in edit mode
+            document.getElementById('modalTitle').textContent = 'Edit Product';
+            document.getElementById('editProductID').textContent = productId;
+            document.getElementById('productIdRow').style.display = 'none';
+
+            // Populate modal with product data
+            document.getElementById('editCategory').value = product.category;
+            document.getElementById('editUnitPrice').value = product.unit_price;
+            document.getElementById('editUnitsSold').value = product.units_sold;
+            document.getElementById('editSalesRevenue').value = product.sales_revenue;
+            document.getElementById('editProfitMargin').value = product.profit_margin;
+            document.getElementById('editStockLevel').value = product.stock_level;
+            document.getElementById('editProductStatus').value = product.product_status;
+            document.getElementById('editSeasonalDemand').value = product.seasonal_demand;
+            
+            // Supply chain data
+            document.getElementById('editVendorName').value = product.vendor_name || '';
+            document.getElementById('editFacilityLocation').value = product.facility_location || '';
+            document.getElementById('editProcessingDays').value = product.processing_days || '';
+            document.getElementById('editOutputQuantity').value = product.output_quantity || '';
+            document.getElementById('editProductionExpenses').value = product.production_expenses || '';
+            document.getElementById('editLogisticsProvider').value = product.logistics_provider || '';
+            document.getElementById('editShippingMethod').value = product.shipping_method || '';
+            document.getElementById('editFreightCharges').value = product.freight_charges || '';
+            document.getElementById('editQualityScore').value = product.quality_score || '';
+            document.getElementById('editReorderPoint').value = product.reorder_point || '';
+            document.getElementById('editWarehouseZone').value = product.warehouse_zone || '';
+            document.getElementById('editSustainabilityIndex').value = product.sustainability_index || '';
+
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('editModal').style.display = 'none';
+            document.getElementById('productIdRow').style.display = 'none';
+        }
+
+        // Handle form submission
+        document.getElementById('editForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const isCreating = document.getElementById('modalTitle').textContent === 'Add New Product';
+            const productId = isCreating ? 
+                document.getElementById('editProductIDInput').value : 
+                document.getElementById('editProductID').textContent;
+            
+            const formData = {
+                category: document.getElementById('editCategory').value,
+                unit_price: document.getElementById('editUnitPrice').value,
+                units_sold: document.getElementById('editUnitsSold').value,
+                sales_revenue: document.getElementById('editSalesRevenue').value,
+                profit_margin: document.getElementById('editProfitMargin').value,
+                stock_level: document.getElementById('editStockLevel').value,
+                product_status: document.getElementById('editProductStatus').value,
+                seasonal_demand: document.getElementById('editSeasonalDemand').value,
+                vendor_name: document.getElementById('editVendorName').value,
+                facility_location: document.getElementById('editFacilityLocation').value,
+                processing_days: document.getElementById('editProcessingDays').value,
+                output_quantity: document.getElementById('editOutputQuantity').value,
+                production_expenses: document.getElementById('editProductionExpenses').value,
+                logistics_provider: document.getElementById('editLogisticsProvider').value,
+                shipping_method: document.getElementById('editShippingMethod').value,
+                freight_charges: document.getElementById('editFreightCharges').value,
+                quality_score: document.getElementById('editQualityScore').value,
+                reorder_point: document.getElementById('editReorderPoint').value,
+                warehouse_zone: document.getElementById('editWarehouseZone').value,
+                sustainability_index: document.getElementById('editSustainabilityIndex').value
+            };
+
+            if (isCreating) {
+                formData.product_id = productId;
+            }
+
+            try {
+                const url = isCreating ? '/api/products' : `/api/products/${productId}`;
+                const method = isCreating ? 'POST' : 'PUT';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (result.success) {
+                    closeModal();
+                    await loadData();
+                    await loadStats();
+                    const action = isCreating ? 'created' : 'updated';
+                    showMessage(`Product ${action} successfully!`, 'success');
+                } else {
+                    throw new Error(result.message || `${isCreating ? 'Create' : 'Update'} failed`);
+                }
+            } catch (error) {
+                console.error(`Error ${isCreating ? 'creating' : 'updating'} product:`, error);
+                showMessage(`Failed to ${isCreating ? 'create' : 'update'} product: ${error.message}`, 'error');
+            }
+        });
+
+        // Delete product
+        async function deleteProduct(productId) {
+            if (!confirm(`Are you sure you want to delete product ${productId}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/products/${productId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (result.success) {
+                    await loadData();
+                    await loadStats();
+                    showMessage('Product deleted successfully!', 'success');
+                } else {
+                    throw new Error(result.message || 'Delete failed');
+                }
+            } catch (error) {
+                console.error('Error deleting product:', error);
+                showMessage(`Failed to delete product: ${error.message}`, 'error');
+            }
+        }
+
+        // Refresh data
+        async function refreshData() {
+            await loadData();
+            await loadStats();
+            showMessage('Data refreshed successfully!', 'success');
+        }
+
+        // Show message
+        function showMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            messageDiv.style.position = 'fixed';
+            messageDiv.style.top = '20px';
+            messageDiv.style.right = '20px';
+            messageDiv.style.zIndex = '1001';
+            messageDiv.style.padding = '15px';
+            messageDiv.style.borderRadius = '5px';
+            messageDiv.style.maxWidth = '300px';
+
+            document.body.appendChild(messageDiv);
+
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 3000);
+        }
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
