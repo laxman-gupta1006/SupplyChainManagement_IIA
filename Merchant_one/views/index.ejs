@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Management Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .controls {
+            padding: 30px;
+            background: white;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .search-box {
+            width: 100%;
+            max-width: 400px;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .search-box:focus {
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            background: #5a67d8;
+        }
+
+        .btn-danger {
+            background: #e53e3e;
+        }
+
+        .btn-danger:hover {
+            background: #c53030;
+        }
+
+        .btn-success {
+            background: #38a169;
+        }
+
+        .btn-success:hover {
+            background: #2f855a;
+        }
+
+        .table-container {
+            padding: 30px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .editable {
+            background: #fff3cd;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .editable:hover {
+            background: #ffeaa7;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 5px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+            color: #6c757d;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        .profit-positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .profit-negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 0;
+                border-radius: 0;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr 1fr;
+                padding: 20px;
+            }
+            
+            .table-container {
+                padding: 15px;
+            }
+            
+            th, td {
+                padding: 8px;
+                font-size: 14px;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📊 Supply Chain Management</h1>
+            <p>Manage your products, suppliers, and logistics data</p>
+        </div>
+
+        <!-- Statistics Dashboard -->
+        <div class="stats" id="statsContainer">
+            <div class="stat-card">
+                <h3>Total Products</h3>
+                <div class="value" id="totalProducts">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Revenue</h3>
+                <div class="value" id="totalRevenue">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Average Price</h3>
+                <div class="value" id="avgPrice">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Product Types</h3>
+                <div class="value" id="productTypes">-</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <input type="text" id="searchBox" class="search-box" placeholder="🔍 Search by SKU, product type, or supplier...">
+            <button class="btn" onclick="refreshData()">🔄 Refresh Data</button>
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-container">
+            <div id="loading" class="loading">Loading data...</div>
+            <div id="error" class="error" style="display: none;"></div>
+            
+            <table id="dataTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Product Type</th>
+                        <th>Price ($)</th>
+                        <th>Units Sold</th>
+                        <th>Revenue ($)</th>
+                        <th>Supplier</th>
+                        <th>Location</th>
+                        <th>Lead Time</th>
+                        <th>Profit ($)</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Product: <span id="editSKU"></span></h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <form id="editForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Product Type:</label>
+                        <select id="editProductType" required>
+                            <option value="skincare">Skincare</option>
+                            <option value="haircare">Haircare</option>
+                            <option value="cosmetics">Cosmetics</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Price ($):</label>
+                        <input type="number" id="editPrice" step="0.01" min="0" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Units Sold:</label>
+                        <input type="number" id="editUnitsSold" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Revenue Generated ($):</label>
+                        <input type="number" id="editRevenue" step="0.01" min="0" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Supplier Name:</label>
+                        <input type="text" id="editSupplier" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Location:</label>
+                        <select id="editLocation" required>
+                            <option value="Mumbai">Mumbai</option>
+                            <option value="Delhi">Delhi</option>
+                            <option value="Bangalore">Bangalore</option>
+                            <option value="Chennai">Chennai</option>
+                            <option value="Kolkata">Kolkata</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Lead Time (days):</label>
+                        <input type="number" id="editLeadTime" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Production Volumes:</label>
+                        <input type="number" id="editProductionVolumes" min="0" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Manufacturing Costs ($):</label>
+                        <input type="number" id="editManufacturingCosts" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Shipping Carriers:</label>
+                        <select id="editShippingCarriers" required>
+                            <option value="Carrier A">Carrier A</option>
+                            <option value="Carrier B">Carrier B</option>
+                            <option value="Carrier C">Carrier C</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Transportation Mode:</label>
+                        <select id="editTransportationMode" required>
+                            <option value="Road">Road</option>
+                            <option value="Air">Air</option>
+                            <option value="Sea">Sea</option>
+                            <option value="Rail">Rail</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Logistics Costs ($):</label>
+                        <input type="number" id="editLogisticsCosts" step="0.01" min="0" required>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px;">
+                    <button type="submit" class="btn btn-success">💾 Save Changes</button>
+                    <button type="button" class="btn" onclick="closeModal()">❌ Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
