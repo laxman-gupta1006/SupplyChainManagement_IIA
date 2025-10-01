@@ -866,6 +866,47 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Add better message styles */
+        .message-toast {
+            transition: all 0.3s ease;
+        }
+
+        /* Ensure modal z-index is proper */
+        .modal {
+            z-index: 1000;
+        }
+
+        /* Better button states */
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Loading state for save button */
+        .btn-loading {
+            position: relative;
+            color: transparent;
+        }
+
+        .btn-loading::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            top: 50%;
+            left: 50%;
+            margin-left: -8px;
+            margin-top: -8px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-right-color: transparent;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -1108,126 +1149,38 @@
     <script>
         let allData = [];
         let filteredData = [];
+        let currentProductId = null; // Track current product being edited
+        let isCreating = false; // Track if we're creating or editing
 
         // Load data when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 DOM Content Loaded - Initializing application...');
-            console.log('📅 Timestamp:', new Date().toLocaleString());
-            
-            // Check if key elements exist
-            const editForm = document.getElementById('editForm');
-            const editModal = document.getElementById('editModal');
-            const searchBox = document.getElementById('searchBox');
-            
-            console.log('🔍 Key elements check:', {
-                editForm: !!editForm,
-                editModal: !!editModal,
-                searchBox: !!searchBox
-            });
-            
-            if (editForm) {
-                console.log('📋 Edit form found:', editForm);
-                console.log('📝 Form elements count:', editForm.elements.length);
-            }
+            console.log('� DOM Content Loaded - Initializing application...');
             
             loadData();
             loadStats();
             
             // Add search functionality
-            if (searchBox) {
-                document.getElementById('searchBox').addEventListener('input', function(e) {
-                    const searchTerm = e.target.value.toLowerCase();
-                    filterData(searchTerm);
-                });
-            } else {
-                console.warn('⚠️ Search box not found!');
-            }
+            document.getElementById('searchBox').addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                filterData(searchTerm);
+            });
             
             // Add button event listeners
-            console.log('🔗 Setting up button event listeners...');
+            document.getElementById('refreshBtn').addEventListener('click', refreshData);
+            document.getElementById('addNewBtn').addEventListener('click', addNewProduct);
+            document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+            document.getElementById('cancelBtn').addEventListener('click', closeModal);
             
-            const refreshBtn = document.getElementById('refreshBtn');
-            const addNewBtn = document.getElementById('addNewBtn');
-            const closeModalBtn = document.getElementById('closeModalBtn');
-            const cancelBtn = document.getElementById('cancelBtn');
-            const saveBtn = document.getElementById('saveBtn');
-            
-            console.log('🔍 Button elements found:', {
-                refreshBtn: !!refreshBtn,
-                addNewBtn: !!addNewBtn,
-                closeModalBtn: !!closeModalBtn,
-                cancelBtn: !!cancelBtn,
-                saveBtn: !!saveBtn
-            });
-            
-            if (refreshBtn) refreshBtn.addEventListener('click', refreshData);
-            if (addNewBtn) addNewBtn.addEventListener('click', function() {
-                console.log('🖱️ Add New button clicked!');
-                addNewProduct();
-            });
-            if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
-            if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-            
-            // Add save button click handler
-            console.log('💾 Setting up save button event listener...');
-            if (saveBtn) {
-                console.log('💾 Save button found, attaching click handler');
-                saveBtn.addEventListener('click', function(e) {
-                    console.log('💾 Save button clicked!', e);
-                    e.preventDefault();
-                    
-                    // Manually trigger form submission
-                    const form = document.getElementById('editForm');
-                    if (form) {
-                        console.log('📝 Triggering form submission...');
-                        
-                        // Validate form first
-                        if (form.checkValidity()) {
-                            console.log('✅ Form is valid, submitting...');
-                            // Create and dispatch submit event
-                            const submitEvent = new Event('submit', {
-                                bubbles: true,
-                                cancelable: true
-                            });
-                            form.dispatchEvent(submitEvent);
-                        } else {
-                            console.log('❌ Form validation failed');
-                            form.reportValidity();
-                        }
-                    } else {
-                        console.error('❌ Form not found!');
-                    }
-                });
-            } else {
-                console.error('❌ Save button not found! Element with ID "saveBtn" does not exist');
-                console.log('🔍 Available buttons in DOM:', Array.from(document.querySelectorAll('button')).map(btn => ({
-                    id: btn.id,
-                    class: btn.className,
-                    text: btn.textContent.trim()
-                })));
-                
-                // Try alternative selectors
-                const saveByClass = document.querySelector('.btn-primary');
-                const saveByText = Array.from(document.querySelectorAll('button')).find(btn => 
-                    btn.textContent.includes('Save Changes')
-                );
-                console.log('🔍 Alternative save button searches:', {
-                    byClass: !!saveByClass,
-                    byText: !!saveByText
-                });
-            }
+            // **FIXED: Proper save button event listener**
+            document.getElementById('saveBtn').addEventListener('click', handleSave);
             
             // Add event delegation for edit and delete buttons
             document.getElementById('dataTableBody').addEventListener('click', function(e) {
-                console.log('🖱️ Table click event:', e.target);
-                
                 if (e.target.classList.contains('edit-btn')) {
                     const productId = e.target.getAttribute('data-product-id');
-                    console.log('✏️ Edit button clicked for product:', productId);
                     editProduct(productId);
                 } else if (e.target.classList.contains('delete-btn')) {
                     const productId = e.target.getAttribute('data-product-id');
-                    console.log('🗑️ Delete button clicked for product:', productId);
                     deleteProduct(productId);
                 }
             });
@@ -1240,6 +1193,128 @@
                 }
             });
         });
+
+        // **FIXED: Separate save handler function**
+        async function handleSave(e) {
+            console.log('💾 Save button clicked!', e);
+            e.preventDefault();
+            e.stopPropagation();
+            
+            try {
+                // Get form data
+                const formData = getFormData();
+                
+                // Validate form
+                if (!validateForm(formData)) {
+                    return;
+                }
+                
+                // Determine if we're creating or updating
+                const url = isCreating ? '/api/products' : `/api/products/${currentProductId}`;
+                const method = isCreating ? 'POST' : 'PUT';
+                
+                console.log('🌐 Making API request:', { url, method, formData });
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                console.log('📡 Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('✅ Operation successful:', result);
+                
+                if (result.success) {
+                    closeModal();
+                    await loadData();
+                    await loadStats();
+                    const action = isCreating ? 'created' : 'updated';
+                    showMessage(`Product ${action} successfully!`, 'success');
+                } else {
+                    throw new Error(result.message || `${isCreating ? 'Create' : 'Update'} failed`);
+                }
+            } catch (error) {
+                console.error('❌ Error saving product:', error);
+                showMessage(`Failed to ${isCreating ? 'create' : 'update'} product: ${error.message}`, 'error');
+            }
+        }
+
+        // **NEW: Get form data function**
+        function getFormData() {
+            const formData = {
+                category: document.getElementById('editCategory').value,
+                unit_price: parseFloat(document.getElementById('editUnitPrice').value) || 0,
+                units_sold: parseInt(document.getElementById('editUnitsSold').value) || 0,
+                sales_revenue: parseFloat(document.getElementById('editSalesRevenue').value) || 0,
+                profit_margin: parseFloat(document.getElementById('editProfitMargin').value) || 0,
+                stock_level: parseInt(document.getElementById('editStockLevel').value) || 0,
+                product_status: document.getElementById('editProductStatus').value,
+                seasonal_demand: document.getElementById('editSeasonalDemand').value,
+                vendor_name: document.getElementById('editVendorName').value,
+                facility_location: document.getElementById('editFacilityLocation').value,
+                processing_days: parseInt(document.getElementById('editProcessingDays').value) || 0,
+                output_quantity: parseInt(document.getElementById('editOutputQuantity').value) || 0,
+                production_expenses: parseFloat(document.getElementById('editProductionExpenses').value) || 0,
+                logistics_provider: document.getElementById('editLogisticsProvider').value,
+                shipping_method: document.getElementById('editShippingMethod').value,
+                freight_charges: parseFloat(document.getElementById('editFreightCharges').value) || 0,
+                quality_score: parseFloat(document.getElementById('editQualityScore').value) || 0,
+                reorder_point: parseInt(document.getElementById('editReorderPoint').value) || 0,
+                warehouse_zone: document.getElementById('editWarehouseZone').value,
+                sustainability_index: parseInt(document.getElementById('editSustainabilityIndex').value) || 0
+            };
+            
+            // Add product_id for new products
+            if (isCreating) {
+                const productIdInput = document.getElementById('editProductIDInput').value.trim();
+                if (!productIdInput) {
+                    throw new Error('Product ID is required for new products');
+                }
+                formData.product_id = productIdInput;
+            }
+            
+            return formData;
+        }
+
+        // **NEW: Form validation function**
+        function validateForm(formData) {
+            // Basic required field validation
+            if (isCreating && !formData.product_id) {
+                showMessage('Product ID is required', 'error');
+                document.getElementById('editProductIDInput').focus();
+                return false;
+            }
+            
+            if (!formData.category) {
+                showMessage('Category is required', 'error');
+                document.getElementById('editCategory').focus();
+                return false;
+            }
+            
+            if (formData.unit_price <= 0) {
+                showMessage('Unit price must be greater than 0', 'error');
+                document.getElementById('editUnitPrice').focus();
+                return false;
+            }
+            
+            // Validate quality score range
+            if (formData.quality_score < 1 || formData.quality_score > 10) {
+                showMessage('Quality score must be between 1 and 10', 'error');
+                document.getElementById('editQualityScore').focus();
+                return false;
+            }
+            
+            return true;
+        }
 
         // Load main data
         async function loadData() {
@@ -1279,13 +1354,19 @@
 
                 const stats = await response.json();
                 
-                document.getElementById('totalProducts').textContent = stats.totalProducts[0].count;
-                document.getElementById('totalRevenue').textContent = '$' + stats.totalRevenue[0].total.toLocaleString('en-US', { maximumFractionDigits: 2 });
-                document.getElementById('avgPrice').textContent = '$' + stats.avgPrice[0].avg.toFixed(2);
-                document.getElementById('productTypes').textContent = stats.productTypes.length;
+                // **FIXED: Handle potential null values**
+                document.getElementById('totalProducts').textContent = stats.totalProducts[0]?.count || 0;
+                document.getElementById('totalRevenue').textContent = '$' + (stats.totalRevenue[0]?.total || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+                document.getElementById('avgPrice').textContent = '$' + (stats.avgPrice[0]?.avg || 0).toFixed(2);
+                document.getElementById('productTypes').textContent = stats.categories?.length || 0;
                 
             } catch (error) {
                 console.error('Error loading stats:', error);
+                // Set default values on error
+                document.getElementById('totalProducts').textContent = '0';
+                document.getElementById('totalRevenue').textContent = '$0';
+                document.getElementById('avgPrice').textContent = '$0';
+                document.getElementById('productTypes').textContent = '0';
             }
         }
 
@@ -1293,6 +1374,13 @@
         function renderTable(data) {
             const tbody = document.getElementById('dataTableBody');
             tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td colspan="12" style="text-align: center; padding: 40px; color: var(--text-secondary);">No products found</td>`;
+                tbody.appendChild(row);
+                return;
+            }
 
             data.forEach(item => {
                 const row = document.createElement('tr');
@@ -1308,11 +1396,11 @@
                 row.innerHTML = `
                     <td>${item.product_id}</td>
                     <td>${item.category}</td>
-                    <td>$${parseFloat(item.unit_price).toFixed(2)}</td>
-                    <td>${parseInt(item.units_sold).toLocaleString()}</td>
-                    <td>$${parseFloat(item.sales_revenue).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                    <td>${item.stock_level}</td>
-                    <td class="${statusClass}">${item.product_status}</td>
+                    <td>$${parseFloat(item.unit_price || 0).toFixed(2)}</td>
+                    <td>${parseInt(item.units_sold || 0).toLocaleString()}</td>
+                    <td>$${parseFloat(item.sales_revenue || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                    <td>${item.stock_level || 0}</td>
+                    <td class="${statusClass}">${item.product_status || 'N/A'}</td>
                     <td>${item.vendor_name || 'N/A'}</td>
                     <td>${item.facility_location || 'N/A'}</td>
                     <td class="${qualityClass}">${item.quality_score ? parseFloat(item.quality_score).toFixed(1) : 'N/A'}</td>
@@ -1342,80 +1430,34 @@
             renderTable(filteredData);
         }
 
-        // Ensure save button has event listener
-        function ensureSaveButtonListener() {
-            console.log('🔄 Ensuring save button has event listener...');
-            const saveBtn = document.getElementById('saveBtn');
-            console.log('💾 Save button check:', !!saveBtn);
-            
-            if (saveBtn && !saveBtn._hasClickListener) {
-                console.log('📎 Attaching save button event listener');
-                saveBtn.addEventListener('click', function(e) {
-                    console.log('💾 Save button clicked! (from ensureSaveButtonListener)', e);
-                    e.preventDefault();
-                    
-                    // Manually trigger form submission
-                    const form = document.getElementById('editForm');
-                    if (form) {
-                        console.log('📝 Triggering form submission...');
-                        
-                        // Validate form first
-                        if (form.checkValidity()) {
-                            console.log('✅ Form is valid, submitting...');
-                            // Create and dispatch submit event
-                            const submitEvent = new Event('submit', {
-                                bubbles: true,
-                                cancelable: true
-                            });
-                            form.dispatchEvent(submitEvent);
-                        } else {
-                            console.log('❌ Form validation failed');
-                            form.reportValidity();
-                        }
-                    } else {
-                        console.error('❌ Form not found!');
-                    }
-                });
-                
-                // Mark as having listener to avoid duplicates
-                saveBtn._hasClickListener = true;
-                console.log('✅ Save button event listener attached successfully');
-            } else if (saveBtn) {
-                console.log('ℹ️ Save button already has event listener');
-            } else {
-                console.error('❌ Save button still not found after modal open');
-            }
-        }
-
         // Add new product
         function addNewProduct() {
             console.log('🆕 Add New Product function called');
             
             try {
                 // Clear all form fields
-                console.log('🧹 Clearing form fields...');
                 document.getElementById('editForm').reset();
                 
+                // Set mode
+                isCreating = true;
+                currentProductId = null;
+                
                 // Show modal in create mode
-                console.log('📝 Setting up modal for create mode...');
                 document.getElementById('modalTitle').textContent = 'Add New Product';
-                document.getElementById('editProductID').textContent = '';
+                document.getElementById('editProductID').textContent = 'New';
                 document.getElementById('productIdRow').style.display = 'grid';
                 
                 const modal = document.getElementById('editModal');
-                console.log('👁️ Showing modal...', modal);
                 modal.style.display = 'block';
                 setTimeout(() => {
                     modal.classList.add('show');
                     console.log('✨ Modal animation class added');
-                    
-                    // Ensure save button has event listener (backup method)
-                    ensureSaveButtonListener();
                 }, 10);
                 
                 console.log('✅ Add new product modal opened successfully');
             } catch (error) {
                 console.error('❌ Error in addNewProduct:', error);
+                showMessage('Error opening add product form: ' + error.message, 'error');
             }
         }
 
@@ -1424,16 +1466,19 @@
             console.log('✏️ Edit Product function called with ID:', productId);
             
             const product = allData.find(p => p.product_id === productId);
-            console.log('🔍 Found product:', product);
             
             if (!product) {
                 console.error('❌ Product not found for ID:', productId);
-                console.log('📊 Available products:', allData.map(p => p.product_id));
+                showMessage('Product not found!', 'error');
                 return;
             }
 
-            // Show modal in edit mode
-            console.log('📝 Setting up modal for edit mode...');
+            try {
+                // Set mode
+                isCreating = false;
+                currentProductId = productId;
+                
+                // Show modal in edit mode
             document.getElementById('modalTitle').textContent = 'Edit Product';
             document.getElementById('editProductID').textContent = productId;
             document.getElementById('productIdRow').style.display = 'none';
@@ -1462,14 +1507,16 @@
             document.getElementById('editWarehouseZone').value = product.warehouse_zone || '';
             document.getElementById('editSustainabilityIndex').value = product.sustainability_index || '';
 
-            const modal = document.getElementById('editModal');
-            modal.style.display = 'block';
-            setTimeout(() => {
-                modal.classList.add('show');
+                const modal = document.getElementById('editModal');
+                modal.style.display = 'block';
+                setTimeout(() => {
+                    modal.classList.add('show');
+                }, 10);
                 
-                // Ensure save button has event listener (backup method)
-                ensureSaveButtonListener();
-            }, 10);
+            } catch (error) {
+                console.error('❌ Error in editProduct:', error);
+                showMessage('Error loading product data: ' + error.message, 'error');
+            }
         }
 
         // Close modal with animation
@@ -1478,127 +1525,16 @@
             modal.classList.remove('show');
             setTimeout(() => {
                 modal.style.display = 'none';
+                // Reset form state
                 document.getElementById('productIdRow').style.display = 'none';
+                isCreating = false;
+                currentProductId = null;
             }, 300);
         }
 
-        // Handle form submission
-        document.getElementById('editForm').addEventListener('submit', async function(e) {
-            console.log('🚀 Form submission started');
-            console.log('📋 Event object:', e);
-            e.preventDefault();
-            
-            console.log('📝 Form submission prevented, processing...');
-            
-            const modalTitle = document.getElementById('modalTitle').textContent;
-            const isCreating = modalTitle === 'Add New Product';
-            console.log('🔍 Modal title:', modalTitle);
-            console.log('🆕 Is creating new product:', isCreating);
-            
-            const productId = isCreating ? 
-                document.getElementById('editProductIDInput').value : 
-                document.getElementById('editProductID').textContent;
-            console.log('🆔 Product ID:', productId);
-            
-            // Collect form data with validation
-            console.log('📊 Collecting form data...');
-            const formData = {};
-            
-            try {
-                formData.category = document.getElementById('editCategory').value;
-                formData.unit_price = document.getElementById('editUnitPrice').value;
-                formData.units_sold = document.getElementById('editUnitsSold').value;
-                formData.sales_revenue = document.getElementById('editSalesRevenue').value;
-                formData.profit_margin = document.getElementById('editProfitMargin').value;
-                formData.stock_level = document.getElementById('editStockLevel').value;
-                formData.product_status = document.getElementById('editProductStatus').value;
-                formData.seasonal_demand = document.getElementById('editSeasonalDemand').value;
-                formData.vendor_name = document.getElementById('editVendorName').value;
-                formData.facility_location = document.getElementById('editFacilityLocation').value;
-                formData.processing_days = document.getElementById('editProcessingDays').value;
-                formData.output_quantity = document.getElementById('editOutputQuantity').value;
-                formData.production_expenses = document.getElementById('editProductionExpenses').value;
-                formData.logistics_provider = document.getElementById('editLogisticsProvider').value;
-                formData.shipping_method = document.getElementById('editShippingMethod').value;
-                formData.freight_charges = document.getElementById('editFreightCharges').value;
-                formData.quality_score = document.getElementById('editQualityScore').value;
-                formData.reorder_point = document.getElementById('editReorderPoint').value;
-                formData.warehouse_zone = document.getElementById('editWarehouseZone').value;
-                formData.sustainability_index = document.getElementById('editSustainabilityIndex').value;
-                
-                console.log('✅ Form data collected successfully:', formData);
-            } catch (error) {
-                console.error('❌ Error collecting form data:', error);
-                showMessage('Error collecting form data: ' + error.message, 'error');
-                return;
-            }
-
-            if (isCreating) {
-                formData.product_id = productId;
-                console.log('🆔 Added product_id to formData for new product:', productId);
-            }
-
-            try {
-                const url = isCreating ? '/api/products' : `/api/products/${productId}`;
-                const method = isCreating ? 'POST' : 'PUT';
-                
-                console.log('🌐 Preparing API request:');
-                console.log('   URL:', url);
-                console.log('   Method:', method);
-                console.log('   Body:', JSON.stringify(formData, null, 2));
-                
-                const response = await fetch(url, {
-                    method: method,
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(formData)
-                });
-                
-                console.log('📡 Response received:');
-                console.log('   Status:', response.status);
-                console.log('   Status Text:', response.statusText);
-                console.log('   OK:', response.ok);
-
-                if (!response.ok) {
-                    console.log('❌ Response not OK, getting error data...');
-                    const errorData = await response.json();
-                    console.log('📄 Error data:', errorData);
-                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-                console.log('📋 Response result:', result);
-                
-                if (result.success) {
-                    console.log('✅ Operation successful, cleaning up...');
-                    closeModal();
-                    console.log('🔄 Reloading data and stats...');
-                    await loadData();
-                    await loadStats();
-                    const action = isCreating ? 'created' : 'updated';
-                    console.log(`🎉 Product ${action} successfully!`);
-                    showMessage(`Product ${action} successfully!`, 'success');
-                } else {
-                    console.log('❌ Operation failed:', result.message);
-                    throw new Error(result.message || `${isCreating ? 'Create' : 'Update'} failed`);
-                }
-            } catch (error) {
-                console.error(`❌ Error ${isCreating ? 'creating' : 'updating'} product:`, error);
-                console.error('📊 Error details:', {
-                    message: error.message,
-                    stack: error.stack,
-                    formData: formData,
-                    isCreating: isCreating,
-                    productId: productId
-                });
-                showMessage(`Failed to ${isCreating ? 'create' : 'update'} product: ${error.message}`, 'error');
-            }
-        });
-
         // Delete product
         async function deleteProduct(productId) {
-            if (!confirm(`Are you sure you want to delete product ${productId}?`)) {
+            if (!confirm(`Are you sure you want to delete product ${productId}? This action cannot be undone.`)) {
                 return;
             }
 
@@ -1634,21 +1570,41 @@
 
         // Show message
         function showMessage(message, type) {
+            // Remove any existing messages
+            const existingMessages = document.querySelectorAll('.message-toast');
+            existingMessages.forEach(msg => msg.remove());
+            
             const messageDiv = document.createElement('div');
-            messageDiv.className = type;
+            messageDiv.className = `message-toast ${type}`;
             messageDiv.textContent = message;
             messageDiv.style.position = 'fixed';
             messageDiv.style.top = '20px';
             messageDiv.style.right = '20px';
             messageDiv.style.zIndex = '1001';
-            messageDiv.style.padding = '15px';
-            messageDiv.style.borderRadius = '5px';
+            messageDiv.style.padding = '15px 20px';
+            messageDiv.style.borderRadius = '8px';
             messageDiv.style.maxWidth = '300px';
+            messageDiv.style.fontWeight = '500';
+            messageDiv.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
+            
+            if (type === 'success') {
+                messageDiv.style.background = 'var(--success-color)';
+                messageDiv.style.color = 'white';
+            } else {
+                messageDiv.style.background = 'var(--error-color)';
+                messageDiv.style.color = 'white';
+            }
 
             document.body.appendChild(messageDiv);
 
             setTimeout(() => {
-                messageDiv.remove();
+                messageDiv.style.opacity = '0';
+                messageDiv.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => {
+                    if (messageDiv.parentNode) {
+                        messageDiv.remove();
+                    }
+                }, 300);
             }, 3000);
         }
 
