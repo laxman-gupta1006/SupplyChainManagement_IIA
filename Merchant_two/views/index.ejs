@@ -1353,19 +1353,25 @@
                 }
 
                 const stats = await response.json();
+                console.log('Stats received:', stats); // Debug log
                 
-                // **FIXED: Handle potential null values**
-                document.getElementById('totalProducts').textContent = stats.totalProducts[0]?.count || 0;
-                document.getElementById('totalRevenue').textContent = '$' + (stats.totalRevenue[0]?.total || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
-                document.getElementById('avgPrice').textContent = '$' + (stats.avgPrice[0]?.avg || 0).toFixed(2);
-                document.getElementById('productTypes').textContent = stats.categories?.length || 0;
+                // **FIXED: Properly parse PostgreSQL numeric values**
+                const totalProducts = parseInt(stats.totalProducts[0]?.count) || 0;
+                const totalRevenue = parseFloat(stats.totalRevenue[0]?.total) || 0;
+                const avgPrice = parseFloat(stats.avgPrice[0]?.avg) || 0;
+                const productTypes = stats.categories?.length || 0;
+                
+                document.getElementById('totalProducts').textContent = totalProducts.toLocaleString();
+                document.getElementById('totalRevenue').textContent = '$' + totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                document.getElementById('avgPrice').textContent = '$' + avgPrice.toFixed(2);
+                document.getElementById('productTypes').textContent = productTypes.toString();
                 
             } catch (error) {
                 console.error('Error loading stats:', error);
                 // Set default values on error
                 document.getElementById('totalProducts').textContent = '0';
-                document.getElementById('totalRevenue').textContent = '$0';
-                document.getElementById('avgPrice').textContent = '$0';
+                document.getElementById('totalRevenue').textContent = '$0.00';
+                document.getElementById('avgPrice').textContent = '$0.00';
                 document.getElementById('productTypes').textContent = '0';
             }
         }
