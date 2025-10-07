@@ -4,14 +4,25 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const UniversalIntelligentSearch = require('./intelligent-search');
+const DynamicSchemaManager = require('./dynamic-schema-manager');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Initialize Dynamic Schema Manager
+const schemaManager = new DynamicSchemaManager();
+
+// Initialize Universal Intelligent Search System
+const intelligentSearch = new UniversalIntelligentSearch();
+
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+// Global dynamic schema context (will be updated automatically)
+let dynamicSchemaContext = 'Schema loading...';
 
 // Merchant_one PostgreSQL connection
 const merchant1Pool = new Pool({
@@ -41,12 +52,40 @@ merchant1Pool.connect((err, client, release) => {
     }
 });
 
-merchant2Pool.connect((err, client, release) => {
+merchant2Pool.connect(async (err, client, release) => {
     if (err) {
         console.error('❌ Error connecting to Merchant_two database:', err.message);
     } else {
         console.log('✅ Connected to Merchant_two database (merchant_two_supply_chain)');
         release();
+        
+        // Initialize dynamic systems after both databases are connected
+        setTimeout(async () => {
+            try {
+                console.log('🚀 Initializing Dynamic Schema Manager...');
+                
+                // Initialize schema discovery
+                const pools = {
+                    'merchant1': merchant1Pool,
+                    'merchant2': merchant2Pool
+                };
+                
+                dynamicSchemaContext = await schemaManager.initializeSchemas(pools);
+                console.log('✅ Dynamic Schema Manager ready!');
+                
+                // Initialize intelligent search with discovered schemas
+                console.log('🧠 Initializing Universal Intelligent Search System...');
+                await intelligentSearch.analyzeAllDatabaseContent(merchant1Pool, merchant2Pool);
+                console.log('✅ Intelligent Search System ready!');
+                
+                console.log('🎉 All systems initialized and ready for adaptive queries!');
+                
+            } catch (initErr) {
+                console.error('❌ Error initializing dynamic systems:', initErr.message);
+                // Use fallback schema context to prevent crashes
+                dynamicSchemaContext = 'Schema discovery failed. Using basic query generation.';
+            }
+        }, 2000); // Wait 2 seconds for both connections to be established
     }
 });
 
@@ -59,8 +98,9 @@ app.use(express.static('public'));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Database schema information for Gemini AI
-const schemaContext = `
+// Dynamic schema context generator function
+function getCurrentSchemaContext() {
+    return `
 You are a SQL query generator for a federated supply chain database system with two PostgreSQL databases:
 
 MERCHANT_ONE DATABASE (supply_chain_management):
@@ -117,10 +157,35 @@ Examples:
 - "Show total revenue" → target: "both", sum revenue_generated from merchant1 and sales_revenue from merchant2
 - "List all cosmetics products" → target: "both", use product_type='cosmetics' for merchant1 and category='cosmetics' for merchant2
 - "Show skincare items" → target: "both", use product_type='skincare' for merchant1 and category='skincare' for merchant2
-- "Show suppliers in Mumbai" → target: "both", check location in merchant1 and facility_location in merchant2
-- "Products with low stock" → target: "merchant2" (only merchant2 has stock_level column)
-- "List all products" → target: "both", SELECT * FROM products_sales for merchant1, SELECT * FROM products for merchant2
+${dynamicSchemaContext}
+
+🚨 CRITICAL RULES:
+1. Use ONLY the tables and columns listed above (they are auto-discovered)
+2. Write table names WITHOUT any database/schema prefix
+3. ✅ CORRECT: "FROM table_name" 
+4. ❌ WRONG: "FROM database.table_name" or "FROM schema.table_name"
+5. Each query executes on its own database connection - prefixes will cause errors
+6. Use ILIKE for text searches (case-insensitive fuzzy matching)
+7. Handle NULL values with COALESCE when needed
+8. Only generate SELECT queries (no INSERT, UPDATE, DELETE)
+
+QUERY GENERATION STRUCTURE:
+Return a JSON object with this exact structure:
+{
+  "target": "merchant1" OR "merchant2" OR "both",
+  "merchant1_query": "SQL query for merchant1 database (or null if not needed)",
+  "merchant2_query": "SQL query for merchant2 database (or null if not needed)", 
+  "explanation": "Brief explanation of what the queries will return",
+  "aggregation_needed": true/false (true if results need combining)
+}
+
+🧠 INTELLIGENT FEATURES:
+- Use semantic column types for better targeting
+- Apply fuzzy matching with % wildcards for partial matches
+- Handle company name variations and product synonyms
+- Generate queries that adapt to the discovered schema structure
 `;
+}
 
 // Serve main dashboard page
 app.get('/', (req, res) => {
@@ -187,8 +252,35 @@ app.post('/api/query', async (req, res) => {
 
         console.log(`🔍 Processing query: "${question}"`);
 
-        // Use Gemini to convert natural language to SQL
-        const prompt = `${schemaContext}\n\nUser Question: "${question}"\n\nGenerate the appropriate SQL query/queries as JSON:`;
+        // 🧠 INTELLIGENT SEARCH PREPROCESSING
+        console.log('🧠 Analyzing query with intelligent search...');
+        const searchResults = intelligentSearch.performIntelligentSearch(question);
+        
+        // Build enhanced context with fuzzy matches and semantic expansions
+        let intelligentContext = '';
+        if (searchResults.length > 0) {
+            console.log(`   📊 Found ${searchResults.length} intelligent matches`);
+            
+            const topMatches = searchResults.slice(0, 10); // Top 10 matches
+            intelligentContext = `\n\n🧠 INTELLIGENT SEARCH CONTEXT:
+Based on fuzzy matching and semantic analysis, here are relevant database entries that match your query:
+
+${topMatches.map(match => 
+    `- "${match.value}" (${match.contentGroup}, similarity: ${(match.similarity?.combined || 0).toFixed(2)}, match: ${match.matchType})`
+).join('\n')}
+
+Use this context to generate better SQL queries that include similar terms, fuzzy matches, and semantic variations.
+For example, if user searches "lipsticks", also include "cosmetics" in your query.
+If user searches "K.P traders", also include variations like "Kapil Prakash" or "KP" in your query.
+
+Generate SQL with ILIKE patterns that capture these variations:`;
+        } else {
+            console.log('   💭 No specific matches found, using general intelligent search');
+            intelligentContext = '\n\n🧠 INTELLIGENT SEARCH: Use fuzzy matching with ILIKE patterns (e.g., %term% for partial matches).';
+        }
+
+        // Use Gemini to convert natural language to SQL with intelligent context
+        const prompt = `${getCurrentSchemaContext()}${intelligentContext}\n\nUser Question: "${question}"\n\nGenerate the appropriate SQL query/queries as JSON:`;
         
         const result = await model.generateContent(prompt);
         const response = await result.response;
@@ -625,6 +717,133 @@ app.get('/api/health', async (req, res) => {
         res.status(500).json({
             status: 'unhealthy',
             error: err.message
+        });
+    }
+});
+
+// API: Test Intelligent Search System
+app.get('/api/intelligent-search', async (req, res) => {
+    try {
+        const { query, type } = req.query;
+        
+        if (!query) {
+            return res.status(400).json({ error: 'Query parameter is required' });
+        }
+
+        console.log(`🧠 Testing intelligent search for: "${query}"`);
+        
+        const searchResults = intelligentSearch.performIntelligentSearch(query, type || 'all');
+        
+        res.json({
+            success: true,
+            query: query,
+            results: searchResults.slice(0, 20), // Top 20 results
+            total_matches: searchResults.length,
+            semantic_patterns: Array.from(intelligentSearch.semanticPatterns.entries())
+                .filter(([key]) => key.includes(query.toLowerCase()))
+                .slice(0, 10) // Top 10 semantic patterns
+        });
+    } catch (err) {
+        console.error('❌ Error in intelligent search:', err);
+        res.status(500).json({ 
+            error: 'Intelligent search failed: ' + err.message 
+        });
+    }
+});
+
+// API: Get all discovered semantic patterns
+app.get('/api/semantic-patterns', (req, res) => {
+    try {
+        const patterns = {};
+        
+        for (const [term, relatedTerms] of intelligentSearch.semanticPatterns.entries()) {
+            patterns[term] = Array.from(relatedTerms);
+        }
+        
+        res.json({
+            success: true,
+            total_patterns: Object.keys(patterns).length,
+            patterns: patterns
+        });
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get semantic patterns: ' + err.message 
+        });
+    }
+});
+
+// API: Get current dynamic schema information
+app.get('/api/schema', (req, res) => {
+    try {
+        const schemas = schemaManager.getAllSchemas();
+        const summary = schemaManager.getSchemaSummary();
+        
+        res.json({
+            success: true,
+            schemas: schemas,
+            summary: summary,
+            last_updated: new Date(),
+            context_preview: getCurrentSchemaContext().substring(0, 500) + '...'
+        });
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get schema information: ' + err.message 
+        });
+    }
+});
+
+// API: Force refresh schema for a specific merchant
+app.post('/api/schema/refresh', async (req, res) => {
+    try {
+        const { merchant } = req.body;
+        
+        if (!merchant || !['merchant1', 'merchant2'].includes(merchant)) {
+            return res.status(400).json({ 
+                error: 'Invalid merchant. Must be "merchant1" or "merchant2"' 
+            });
+        }
+        
+        const pool = merchant === 'merchant1' ? merchant1Pool : merchant2Pool;
+        
+        console.log(`🔄 Force refreshing schema for ${merchant}...`);
+        await schemaManager.refreshSchema(merchant, pool);
+        
+        // Update global schema context
+        const pools = { 'merchant1': merchant1Pool, 'merchant2': merchant2Pool };
+        dynamicSchemaContext = schemaManager.generateUnifiedSchemaContext();
+        
+        console.log(`✅ Schema refreshed for ${merchant}`);
+        
+        res.json({
+            success: true,
+            message: `Schema refreshed for ${merchant}`,
+            updated_at: new Date()
+        });
+        
+    } catch (err) {
+        console.error(`❌ Error refreshing schema:`, err);
+        res.status(500).json({ 
+            error: 'Failed to refresh schema: ' + err.message 
+        });
+    }
+});
+
+// API: Get schema discovery status and health
+app.get('/api/schema/status', (req, res) => {
+    try {
+        const summary = schemaManager.getSchemaSummary();
+        
+        res.json({
+            success: true,
+            status: 'active',
+            schemas: summary,
+            intelligent_search_ready: intelligentSearch.contentCache.size > 0,
+            dynamic_context_loaded: dynamicSchemaContext !== 'Schema loading...',
+            total_discovered_tables: Object.values(summary).reduce((sum, s) => sum + s.tables.length, 0)
+        });
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get schema status: ' + err.message 
         });
     }
 });

@@ -1451,30 +1451,36 @@
 
             // Determine what data to visualize
             let chartData = null;
-            let chartTitle = '';
+            let dataSource = '';
 
             // Priority: Use aggregated data first, then individual merchant data
             if (data.aggregated && data.aggregated.combined_data) {
                 chartData = data.aggregated.combined_data;
-                chartTitle = 'Combined Results Visualization';
+                dataSource = 'combined';
             } else if (data.aggregated && !data.aggregated.combined_data) {
                 // Single value aggregation (total, average, etc.)
                 chartData = formatAggregatedForChart(data.aggregated);
-                chartTitle = 'Aggregated Metrics';
+                dataSource = 'aggregated';
             } else if (data.results.merchant1 && data.results.merchant1.length > 0) {
                 chartData = data.results.merchant1;
-                chartTitle = 'Merchant_one Results';
+                dataSource = 'merchant1';
             } else if (data.results.merchant2 && data.results.merchant2.length > 0) {
                 chartData = data.results.merchant2;
-                chartTitle = 'Merchant_two Results';
+                dataSource = 'merchant2';
             }
 
             if (!chartData || chartData.length === 0) {
                 return; // No data to visualize
             }
 
-            // Detect chart type based on data structure
+            // Detect chart type based on data structure and question context
             const chartConfig = detectChartType(chartData, data.question);
+            
+            // Use intelligent chart title or fallback to data source
+            const chartTitle = chartConfig.chartTitle || 
+                (dataSource === 'combined' ? 'Combined Results' : 
+                 dataSource === 'aggregated' ? 'Aggregated Metrics' :
+                 dataSource === 'merchant1' ? 'Merchant One Results' : 'Merchant Two Results');
             
             // Create chart container
             const resultsContent = document.getElementById('resultsContent');
@@ -1508,7 +1514,7 @@
             
             resultsContent.appendChild(chartContainer);
 
-            // Render the chart
+            // Render the chart with enhanced configuration
             renderChart(chartConfig.type, chartData, chartConfig);
 
             // Add event listeners for chart type switching
@@ -1540,43 +1546,126 @@
             const lowerQuestion = question.toLowerCase();
             const firstRow = data[0];
             
-            if (!firstRow) return { type: 'bar', labelKey: null, valueKey: null };
+            if (!firstRow) return { type: 'bar', labelKey: null, valueKey: null, chartTitle: 'Data Visualization' };
 
-            // Find label and value keys
+            // Analyze data structure
+            const keys = Object.keys(firstRow).filter(k => k !== '_source');
             let labelKey = null;
-            let valueKey = null;
+            let valueKeys = [];
+            let hasMultipleValues = false;
 
+            // Identify column types
             Object.entries(firstRow).forEach(([key, value]) => {
                 if (key === '_source') return;
                 
-                if (typeof value === 'string' || key.toLowerCase().includes('type') || 
-                    key.toLowerCase().includes('category') || key.toLowerCase().includes('name')) {
-                    labelKey = key;
-                } else if (typeof value === 'number' || !isNaN(parseFloat(value))) {
-                    valueKey = key;
+                const numValue = parseFloat(value);
+                if (isNaN(numValue) || typeof value === 'string') {
+                    // This is a label/category column
+                    if (!labelKey) labelKey = key;
+                } else {
+                    // This is a numeric column
+                    valueKeys.push(key);
                 }
             });
 
             // Special handling for formatted aggregated data
             if (firstRow.label && firstRow.value !== undefined) {
                 labelKey = 'label';
-                valueKey = 'value';
+                valueKeys = ['value'];
             }
 
-            // Determine chart type based on query and data characteristics
-            let chartType = 'bar'; // Default
+            hasMultipleValues = valueKeys.length > 1;
 
-            if (lowerQuestion.includes('distribution') || lowerQuestion.includes('breakdown')) {
-                chartType = data.length <= 6 ? 'pie' : 'bar';
-            } else if (lowerQuestion.includes('compare') || lowerQuestion.includes('comparison')) {
+            // INTELLIGENT CHART TYPE DETECTION based on query context and data
+            let chartType = 'bar';
+            let chartTitle = 'Data Visualization';
+            let multiDataset = false;
+
+            // 1. COMPARISON QUERIES - Use grouped bar chart
+            if (lowerQuestion.includes('compare') || lowerQuestion.includes('comparison') || 
+                lowerQuestion.includes('versus') || lowerQuestion.includes('vs') ||
+                lowerQuestion.includes('between') || lowerQuestion.includes('which') && lowerQuestion.includes('better')) {
                 chartType = 'bar';
-            } else if (lowerQuestion.includes('trend') || lowerQuestion.includes('over time')) {
-                chartType = 'line';
-            } else if (data.length <= 5) {
-                chartType = 'doughnut';
+                chartTitle = 'Comparison Analysis';
+                multiDataset = hasMultipleValues;
+            }
+            
+            // 2. DISTRIBUTION/BREAKDOWN QUERIES - Use pie/doughnut for small datasets
+            else if (lowerQuestion.includes('distribution') || lowerQuestion.includes('breakdown') ||
+                     lowerQuestion.includes('composition') || lowerQuestion.includes('proportion')) {
+                chartType = data.length <= 6 ? 'doughnut' : 'bar';
+                chartTitle = 'Distribution Analysis';
+            }
+            
+            // 3. TOTAL/SUM QUERIES with merchant breakdown - Use stacked bar or pie
+            else if ((lowerQuestion.includes('total') || lowerQuestion.includes('sum')) && 
+                     (lowerQuestion.includes('merchant') || lowerQuestion.includes('both'))) {
+                chartType = data.length <= 4 ? 'pie' : 'bar';
+                chartTitle = 'Total Across Merchants';
+            }
+            
+            // 4. REVENUE/SALES QUERIES - Use bar chart with currency
+            else if (lowerQuestion.includes('revenue') || lowerQuestion.includes('sales') ||
+                     lowerQuestion.includes('profit') || lowerQuestion.includes('income')) {
+                chartType = 'bar';
+                chartTitle = 'Revenue Analysis';
+            }
+            
+            // 5. COUNT/QUANTITY QUERIES - Use bar or pie
+            else if (lowerQuestion.includes('count') || lowerQuestion.includes('how many') ||
+                     lowerQuestion.includes('number of')) {
+                chartType = data.length <= 8 ? 'doughnut' : 'bar';
+                chartTitle = 'Count Analysis';
+            }
+            
+            // 6. PRICE/COST QUERIES - Use horizontal bar for better readability
+            else if (lowerQuestion.includes('price') || lowerQuestion.includes('cost') ||
+                     lowerQuestion.includes('expensive') || lowerQuestion.includes('cheap')) {
+                chartType = 'bar';
+                chartTitle = 'Price Analysis';
+            }
+            
+            // 7. AVERAGE QUERIES - Use line chart for trends
+            else if (lowerQuestion.includes('average') || lowerQuestion.includes('mean')) {
+                chartType = data.length > 5 ? 'line' : 'bar';
+                chartTitle = 'Average Analysis';
+            }
+            
+            // 8. TOP/BEST/HIGHEST QUERIES - Use horizontal bar
+            else if (lowerQuestion.includes('top') || lowerQuestion.includes('best') ||
+                     lowerQuestion.includes('highest') || lowerQuestion.includes('most')) {
+                chartType = 'bar';
+                chartTitle = 'Top Performers';
+            }
+            
+            // 9. LIST QUERIES with few items - Use doughnut
+            else if (lowerQuestion.includes('list') && data.length <= 10) {
+                chartType = data.length <= 6 ? 'pie' : 'bar';
+                chartTitle = 'Overview';
+            }
+            
+            // 10. DEFAULT: Based on data size
+            else {
+                if (data.length <= 3) {
+                    chartType = 'doughnut';
+                } else if (data.length <= 8) {
+                    chartType = 'bar';
+                } else {
+                    chartType = 'bar';
+                }
+                chartTitle = 'Data Overview';
             }
 
-            return { type: chartType, labelKey, valueKey };
+            return { 
+                type: chartType, 
+                labelKey, 
+                valueKeys,
+                valueKey: valueKeys[0], // Primary value key for backward compatibility
+                chartTitle,
+                multiDataset,
+                dataSize: data.length,
+                hasComparison: hasMultipleValues
+            };
         }
 
         function renderChart(type, data, config) {
@@ -1586,46 +1675,82 @@
 
             const ctx = document.getElementById('resultChart').getContext('2d');
             
-            // Extract labels and values
+            // Extract labels
             const labels = data.map(row => {
                 const label = config.labelKey ? row[config.labelKey] : Object.values(row)[0];
-                return String(label).substring(0, 30); // Truncate long labels
+                return String(label).substring(0, 30);
             });
 
-            const values = data.map(row => {
-                const value = config.valueKey ? row[config.valueKey] : Object.values(row).find(v => !isNaN(parseFloat(v)));
-                return parseFloat(value) || 0;
-            });
-
-            // Generate colors
-            const colors = generateColors(values.length);
-
-            // Chart configuration
-            const chartConfig = {
-                type: type,
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: config.valueKey ? formatColumnName(config.valueKey) : 'Value',
-                        data: values,
-                        backgroundColor: type === 'line' ? 'rgba(99, 102, 241, 0.2)' : colors.background,
-                        borderColor: type === 'line' ? 'rgba(99, 102, 241, 1)' : colors.border,
+            // Prepare datasets
+            let datasets = [];
+            
+            if (config.multiDataset && config.valueKeys.length > 1) {
+                // Multiple value columns - create dataset for each
+                const datasetColors = [
+                    { bg: 'rgba(99, 102, 241, 0.7)', border: 'rgba(99, 102, 241, 1)' },
+                    { bg: 'rgba(236, 72, 153, 0.7)', border: 'rgba(236, 72, 153, 1)' },
+                    { bg: 'rgba(6, 182, 212, 0.7)', border: 'rgba(6, 182, 212, 1)' }
+                ];
+                
+                config.valueKeys.forEach((key, index) => {
+                    const color = datasetColors[index % datasetColors.length];
+                    datasets.push({
+                        label: formatColumnName(key),
+                        data: data.map(row => parseFloat(row[key]) || 0),
+                        backgroundColor: type === 'line' ? color.bg : color.bg,
+                        borderColor: color.border,
                         borderWidth: 2,
                         tension: 0.4,
                         fill: type === 'line'
-                    }]
+                    });
+                });
+            } else {
+                // Single value column
+                const values = data.map(row => {
+                    const value = config.valueKey ? row[config.valueKey] : Object.values(row).find(v => !isNaN(parseFloat(v)));
+                    return parseFloat(value) || 0;
+                });
+
+                const colors = generateColors(values.length);
+                
+                datasets.push({
+                    label: config.valueKey ? formatColumnName(config.valueKey) : 'Value',
+                    data: values,
+                    backgroundColor: type === 'line' ? 'rgba(99, 102, 241, 0.2)' : colors.background,
+                    borderColor: type === 'line' ? 'rgba(99, 102, 241, 1)' : colors.border,
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: type === 'line'
+                });
+            }
+
+            // Intelligent axis configuration
+            const isHorizontal = config.dataSize > 8 && type === 'bar';
+            const actualType = isHorizontal ? 'bar' : type;
+            
+            // Chart configuration with context-aware options
+            const chartConfig = {
+                type: actualType,
+                data: {
+                    labels: labels,
+                    datasets: datasets
                 },
                 options: {
+                    indexAxis: isHorizontal ? 'y' : 'x',
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            display: type === 'pie' || type === 'doughnut',
-                            position: 'right',
+                            display: type === 'pie' || type === 'doughnut' || config.multiDataset,
+                            position: (type === 'pie' || type === 'doughnut') ? 'right' : 'top',
                             labels: {
                                 color: '#cbd5e1',
-                                font: { size: 12 }
+                                font: { size: 12 },
+                                padding: 10
                             }
+                        },
+                        title: {
+                            display: false
                         },
                         tooltip: {
                             backgroundColor: '#1e293b',
@@ -1635,14 +1760,23 @@
                             borderWidth: 1,
                             callbacks: {
                                 label: function(context) {
-                                    let label = context.label || '';
+                                    let label = context.dataset.label || '';
                                     if (label) label += ': ';
                                     
-                                    const value = context.parsed.y || context.parsed;
-                                    if (config.valueKey && (config.valueKey.toLowerCase().includes('price') || 
-                                        config.valueKey.toLowerCase().includes('revenue') ||
-                                        config.valueKey.toLowerCase().includes('cost'))) {
+                                    const value = context.parsed.y !== undefined ? context.parsed.y : context.parsed;
+                                    
+                                    // Smart currency formatting
+                                    const valueKey = config.valueKey || '';
+                                    if (valueKey.toLowerCase().includes('price') || 
+                                        valueKey.toLowerCase().includes('revenue') ||
+                                        valueKey.toLowerCase().includes('cost') ||
+                                        valueKey.toLowerCase().includes('sales') ||
+                                        valueKey.toLowerCase().includes('total') ||
+                                        valueKey.toLowerCase().includes('profit')) {
                                         label += '$' + value.toLocaleString(undefined, {minimumFractionDigits: 2});
+                                    } else if (valueKey.toLowerCase().includes('percent') || 
+                                               valueKey.toLowerCase().includes('margin')) {
+                                        label += value.toFixed(1) + '%';
                                     } else {
                                         label += value.toLocaleString();
                                     }
@@ -1657,10 +1791,16 @@
                             ticks: {
                                 color: '#cbd5e1',
                                 callback: function(value) {
-                                    if (config.valueKey && (config.valueKey.toLowerCase().includes('price') || 
-                                        config.valueKey.toLowerCase().includes('revenue') ||
-                                        config.valueKey.toLowerCase().includes('cost'))) {
+                                    const valueKey = config.valueKey || '';
+                                    if (valueKey.toLowerCase().includes('price') || 
+                                        valueKey.toLowerCase().includes('revenue') ||
+                                        valueKey.toLowerCase().includes('cost') ||
+                                        valueKey.toLowerCase().includes('sales') ||
+                                        valueKey.toLowerCase().includes('total')) {
                                         return '$' + value.toLocaleString();
+                                    } else if (valueKey.toLowerCase().includes('percent') || 
+                                               valueKey.toLowerCase().includes('margin')) {
+                                        return value + '%';
                                     }
                                     return value.toLocaleString();
                                 }
@@ -1672,11 +1812,12 @@
                         x: {
                             ticks: {
                                 color: '#cbd5e1',
-                                maxRotation: 45,
+                                maxRotation: isHorizontal ? 0 : 45,
                                 minRotation: 0
                             },
                             grid: {
-                                color: 'rgba(51, 65, 85, 0.3)'
+                                color: 'rgba(51, 65, 85, 0.3)',
+                                display: isHorizontal
                             }
                         }
                     } : {}
