@@ -345,14 +345,16 @@
             <table id="dataTable" style="display: none;">
                 <thead>
                     <tr>
-                        <th>SKU</th>
-                        <th>Product Type</th>
-                        <th>Price ($)</th>
+                        <th>Item ID</th>
+                        <th>Category</th>
+                        <th>Brand</th>
+                        <th>Product Name</th>
+                        <th>Unit Cost ($)</th>
                         <th>Units Sold</th>
-                        <th>Revenue ($)</th>
-                        <th>Supplier</th>
+                        <th>Total Earnings ($)</th>
+                        <th>Vendor</th>
                         <th>Location</th>
-                        <th>Lead Time</th>
+                        <th>Delivery Time (days)</th>
                         <th>Profit ($)</th>
                         <th>Actions</th>
                     </tr>
@@ -374,33 +376,35 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Product Type:</label>
-                        <select id="editProductType" required>
+                        <select id="editProductCategory" required>
                             <option value="skincare">Skincare</option>
                             <option value="haircare">Haircare</option>
                             <option value="cosmetics">Cosmetics</option>
+                            <option value="fragrance">Fragrance</option>
+                            <option value="wellness">Wellness</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Price ($):</label>
-                        <input type="number" id="editPrice" step="0.01" min="0" required>
+                        <input type="number" id="editUnitCost" step="0.01" min="0" required>
                     </div>
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
                         <label>Units Sold:</label>
-                        <input type="number" id="editUnitsSold" min="0" required>
+                        <input type="number" id="editQuantitySold" min="0" required>
                     </div>
                     <div class="form-group">
                         <label>Revenue Generated ($):</label>
-                        <input type="number" id="editRevenue" step="0.01" min="0" required>
+                        <input type="number" id="editTotalEarnings" step="0.01" min="0" required>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
                         <label>Supplier Name:</label>
-                        <input type="text" id="editSupplier" required>
+                        <input type="text" id="editVendorCompany" required>
                     </div>
                     <div class="form-group">
                         <label>Location:</label>
@@ -417,25 +421,27 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Lead Time (days):</label>
-                        <input type="number" id="editLeadTime" min="0" required>
+                        <input type="number" id="editDeliveryTimeDays" min="0" required>
                     </div>
                     <div class="form-group">
                         <label>Production Volumes:</label>
-                        <input type="number" id="editProductionVolumes" min="0" required>
+                        <input type="number" id="editOrderQuantity" min="0" required>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
                         <label>Manufacturing Costs ($):</label>
-                        <input type="number" id="editManufacturingCosts" step="0.01" min="0" required>
+                        <input type="number" id="editProductionCost" step="0.01" min="0" required>
                     </div>
                     <div class="form-group">
                         <label>Shipping Carriers:</label>
-                        <select id="editShippingCarriers" required>
-                            <option value="Carrier A">Carrier A</option>
-                            <option value="Carrier B">Carrier B</option>
-                            <option value="Carrier C">Carrier C</option>
+                        <select id="editLogisticsPartner" required>
+                            <option value="BlueDart Express">BlueDart Express</option>
+                            <option value="DTDC Courier">DTDC Courier</option>
+                            <option value="Delhivery">Delhivery</option>
+                            <option value="FedEx India">FedEx India</option>
+                            <option value="Ekart Logistics">Ekart Logistics</option>
                         </select>
                     </div>
                 </div>
@@ -443,16 +449,17 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Transportation Mode:</label>
-                        <select id="editTransportationMode" required>
-                            <option value="Road">Road</option>
-                            <option value="Air">Air</option>
-                            <option value="Sea">Sea</option>
-                            <option value="Rail">Rail</option>
+                        <select id="editShippingMethod" required>
+                            <option value="Express Delivery">Express Delivery</option>
+                            <option value="Standard Shipping">Standard Shipping</option>
+                            <option value="Same Day Delivery">Same Day Delivery</option>
+                            <option value="Next Day Delivery">Next Day Delivery</option>
+                            <option value="Economy Shipping">Economy Shipping</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Logistics Costs ($):</label>
-                        <input type="number" id="editLogisticsCosts" step="0.01" min="0" required>
+                        <input type="number" id="editLogisticsFee" step="0.01" min="0" required>
                     </div>
                 </div>
 
