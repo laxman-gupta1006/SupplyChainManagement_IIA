@@ -6,6 +6,7 @@ const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const UniversalIntelligentSearch = require('./intelligent-search');
 const DynamicSchemaManager = require('./dynamic-schema-manager');
+const UnstructuredDataHandler = require('./unstructured-data-handler');
 require('dotenv').config();
 
 const app = express();
@@ -16,6 +17,9 @@ const schemaManager = new DynamicSchemaManager();
 
 // Initialize Universal Intelligent Search System
 const intelligentSearch = new UniversalIntelligentSearch();
+
+// Initialize Unstructured Data Handler (THIRD DATA SOURCE)
+const unstructuredData = new UnstructuredDataHandler();
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -78,7 +82,12 @@ merchant2Pool.connect(async (err, client, release) => {
                 await intelligentSearch.analyzeAllDatabaseContent(merchant1Pool, merchant2Pool);
                 console.log('✅ Intelligent Search System ready!');
                 
-                console.log('🎉 All systems initialized and ready for adaptive queries!');
+                // Initialize unstructured data handler (THIRD DATA SOURCE)
+                console.log('📄 Initializing Unstructured Data Handler...');
+                await unstructuredData.initialize();
+                console.log('✅ Unstructured Data Handler ready!');
+                
+                console.log('🎉 All 3 data sources initialized and ready for federated queries!');
                 
             } catch (initErr) {
                 console.error('❌ Error initializing dynamic systems:', initErr.message);
@@ -101,7 +110,10 @@ app.set('views', path.join(__dirname, 'views'));
 // Dynamic schema context generator function
 function getCurrentSchemaContext() {
     return `
-You are a SQL query generator for a federated supply chain database system with two PostgreSQL databases:
+You are a query generator for a federated supply chain system with THREE data sources:
+
+DATA SOURCE 1 - MERCHANT_ONE DATABASE (supply_chain_management):
+PostgreSQL database with structured relational data.
 
 MERCHANT_ONE DATABASE (supply_chain_management):
 Tables:
@@ -114,6 +126,21 @@ Tables:
 1. products (product_id VARCHAR PRIMARY KEY, category VARCHAR, unit_price DECIMAL, units_sold INTEGER, sales_revenue DECIMAL, profit_margin DECIMAL, stock_level INTEGER, product_status VARCHAR, seasonal_demand VARCHAR)
    - category contains: 'cosmetics', 'skincare', 'haircare' (SAME values as Merchant_one's product_type!)
 2. supply_chain (id SERIAL PRIMARY KEY, product_id VARCHAR, vendor_name VARCHAR, facility_location VARCHAR, processing_days INTEGER, output_quantity INTEGER, production_expenses DECIMAL, logistics_provider VARCHAR, shipping_method VARCHAR, freight_charges DECIMAL, quality_score DECIMAL, reorder_point INTEGER, warehouse_zone VARCHAR, sustainability_index INTEGER)
+
+DATA SOURCE 3 - UNSTRUCTURED DATA (Text Data):
+Contains 3000+ entries of customer feedback, support tickets, social media posts, and market reports.
+Types available:
+- Support Tickets: Customer service issues, complaints, resolutions (CS-YYYY-XXXX format)
+- Social Media Posts: Twitter, Facebook, Instagram, YouTube posts with sentiment analysis (SM-YYYYXXXX format)
+- Product Reviews: Customer ratings and feedback (RV-YYYY-XXXX format)
+- Market Reports: Industry trends, consumer insights, recommendations (MR-YYYYXXXX format)
+
+🔍 Query unstructured data when users ask about:
+- Customer feedback, reviews, complaints, sentiments, opinions
+- Social media mentions, posts, engagement, hashtags
+- Support tickets, service issues, customer satisfaction
+- Market trends, consumer behavior, industry insights
+- Qualitative data, unstructured information, customer voices
 
 KEY MAPPINGS:
 - Merchant_one uses "sku" ↔ Merchant_two uses "product_id"
@@ -134,15 +161,21 @@ KEY MAPPINGS:
 - Each query executes on its own specific database connection - prefixes will cause errors
 
 When generating queries:
-1. Determine which database(s) to query based on the user's question
-2. Generate valid PostgreSQL SQL queries
+1. Determine which data source(s) to query based on the user's question:
+   - For structured data (products, sales, vendors, logistics) → Use merchant1/merchant2 databases
+   - For unstructured data (reviews, feedback, sentiments, social media) → Set query_unstructured: true
+   - Can query both structured AND unstructured data together
+
+2. Generate valid PostgreSQL SQL queries for databases
 3. Return a JSON object with this exact structure:
 {
   "target": "merchant1" OR "merchant2" OR "both",
   "merchant1_query": "SQL query for Merchant_one (or null if not needed)",
   "merchant2_query": "SQL query for Merchant_two (or null if not needed)",
+  "query_unstructured": true/false (true if unstructured data needed),
+  "unstructured_keywords": "keywords to search in unstructured data (if query_unstructured is true)",
   "explanation": "Brief explanation of what the queries will return",
-  "aggregation_needed": true/false (true if results from both databases need to be combined)
+  "aggregation_needed": true/false (true if results from multiple sources need to be combined)
 }
 
 4. Only generate SELECT queries (no INSERT, UPDATE, DELETE for safety)
@@ -296,7 +329,9 @@ Generate SQL with ILIKE patterns that capture these variations:`;
         // Execute queries based on target
         let merchant1Results = null;
         let merchant2Results = null;
+        let unstructuredResults = null;
 
+        // Query structured databases
         if (queryPlan.target === 'merchant1' || queryPlan.target === 'both') {
             if (queryPlan.merchant1_query) {
                 console.log('📊 Executing Merchant_one query:', queryPlan.merchant1_query);
@@ -311,6 +346,13 @@ Generate SQL with ILIKE patterns that capture these variations:`;
             }
         }
 
+        // Query unstructured data if needed
+        if (queryPlan.query_unstructured) {
+            console.log('📄 Querying unstructured data with keywords:', queryPlan.unstructured_keywords || question);
+            const unstructuredQuery = queryPlan.unstructured_keywords || question;
+            unstructuredResults = await unstructuredData.queryWithLLM(unstructuredQuery, model);
+        }
+
         // Prepare response
         const responseData = {
             success: true,
@@ -323,9 +365,15 @@ Generate SQL with ILIKE patterns that capture these variations:`;
             },
             results: {
                 merchant1: merchant1Results,
-                merchant2: merchant2Results
+                merchant2: merchant2Results,
+                unstructured: unstructuredResults ? {
+                    analysis: unstructuredResults.analysis,
+                    entriesAnalyzed: unstructuredResults.dataEntriesAnalyzed,
+                    sampleData: unstructuredResults.sampleData
+                } : null
             },
-            aggregation_needed: queryPlan.aggregation_needed || false
+            aggregation_needed: queryPlan.aggregation_needed || false,
+            unstructured_queried: queryPlan.query_unstructured || false
         };
 
         // Perform aggregation if needed
@@ -333,8 +381,14 @@ Generate SQL with ILIKE patterns that capture these variations:`;
             responseData.aggregated = performAggregation(merchant1Results, merchant2Results, question);
         }
 
-        // Generate natural language insights
-        responseData.insights = await generateInsights(question, merchant1Results, merchant2Results, responseData.aggregated);
+        // Generate natural language insights (including unstructured data)
+        responseData.insights = await generateInsights(
+            question, 
+            merchant1Results, 
+            merchant2Results, 
+            responseData.aggregated,
+            unstructuredResults
+        );
 
         console.log('✅ Query executed successfully');
         res.json(responseData);
@@ -584,10 +638,12 @@ function performAggregation(m1Data, m2Data, question) {
 }
 
 // Helper function to generate natural language insights using Gemini AI
-async function generateInsights(question, merchant1Data, merchant2Data, aggregatedData) {
+async function generateInsights(question, merchant1Data, merchant2Data, aggregatedData, unstructuredData) {
     try {
-        // Only generate insights if we have data
-        if ((!merchant1Data || merchant1Data.length === 0) && (!merchant2Data || merchant2Data.length === 0)) {
+        // Only generate insights if we have data from at least one source
+        if ((!merchant1Data || merchant1Data.length === 0) && 
+            (!merchant2Data || merchant2Data.length === 0) &&
+            (!unstructuredData || !unstructuredData.success)) {
             return null;
         }
 
@@ -611,6 +667,12 @@ async function generateInsights(question, merchant1Data, merchant2Data, aggregat
         if (aggregatedData) {
             dataSummary += `Combined/Aggregated Results:\n`;
             dataSummary += JSON.stringify(aggregatedData, null, 2) + '\n\n';
+        }
+
+        // Add unstructured data analysis if available
+        if (unstructuredData && unstructuredData.success) {
+            dataSummary += `\nUnstructured Data Analysis (${unstructuredData.dataEntriesAnalyzed} entries):\n`;
+            dataSummary += unstructuredData.analysis + '\n\n';
         }
 
         const insightPrompt = `${dataSummary}
@@ -848,6 +910,207 @@ app.get('/api/schema/status', (req, res) => {
     }
 });
 
+// ============================================================================
+// UNSTRUCTURED DATA ENDPOINTS (THIRD DATA SOURCE)
+// ============================================================================
+
+// API: Query unstructured data with natural language
+app.post('/api/query-unstructured', async (req, res) => {
+    const { question } = req.body;
+    
+    if (!question) {
+        return res.status(400).json({ error: 'Question is required' });
+    }
+    
+    try {
+        console.log(`🔍 Querying unstructured data: "${question}"`);
+        
+        const result = await unstructuredData.queryWithLLM(question, model);
+        
+        res.json({
+            success: result.success,
+            question: question,
+            analysis: result.analysis,
+            dataEntriesAnalyzed: result.dataEntriesAnalyzed,
+            sampleData: result.sampleData,
+            error: result.error
+        });
+        
+    } catch (err) {
+        console.error('❌ Error querying unstructured data:', err.message);
+        res.status(500).json({ 
+            error: 'Failed to query unstructured data: ' + err.message 
+        });
+    }
+});
+
+// API: Get unstructured data statistics
+app.get('/api/unstructured-stats', (req, res) => {
+    try {
+        const stats = unstructuredData.getStats();
+        
+        res.json({
+            success: true,
+            stats: stats
+        });
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get unstructured data stats: ' + err.message 
+        });
+    }
+});
+
+// API: Search unstructured data with filters
+app.post('/api/search-unstructured', async (req, res) => {
+    const { query, type, merchant, category, productId, sentiment, limit } = req.body;
+    
+    try {
+        const results = unstructuredData.searchData(query || '', {
+            type,
+            merchant,
+            category,
+            productId,
+            sentiment,
+            limit: limit || 50
+        });
+        
+        res.json({
+            success: true,
+            query: query,
+            filters: { type, merchant, category, productId, sentiment },
+            totalResults: results.length,
+            results: results
+        });
+        
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to search unstructured data: ' + err.message 
+        });
+    }
+});
+
+// API: Get product sentiment from unstructured data
+app.get('/api/product-sentiment/:productId', (req, res) => {
+    const { productId } = req.params;
+    
+    try {
+        const sentiment = unstructuredData.getProductSentiment(productId);
+        
+        res.json({
+            success: true,
+            productId: productId,
+            sentiment: sentiment
+        });
+        
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get product sentiment: ' + err.message 
+        });
+    }
+});
+
+// API: Get support tickets
+app.get('/api/support-tickets', (req, res) => {
+    const { merchant, category, status, priority, limit } = req.query;
+    
+    try {
+        const tickets = unstructuredData.getSupportTickets({
+            merchant,
+            category,
+            status,
+            priority,
+            limit: limit ? parseInt(limit) : 50
+        });
+        
+        res.json({
+            success: true,
+            totalTickets: tickets.length,
+            tickets: tickets
+        });
+        
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get support tickets: ' + err.message 
+        });
+    }
+});
+
+// API: Get social media posts
+app.get('/api/social-media', (req, res) => {
+    const { merchant, category, sentiment, platform, limit } = req.query;
+    
+    try {
+        const posts = unstructuredData.getSocialMediaPosts({
+            merchant,
+            category,
+            sentiment,
+            platform,
+            limit: limit ? parseInt(limit) : 50
+        });
+        
+        res.json({
+            success: true,
+            totalPosts: posts.length,
+            posts: posts
+        });
+        
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get social media posts: ' + err.message 
+        });
+    }
+});
+
+// API: Get product reviews
+app.get('/api/product-reviews', (req, res) => {
+    const { merchant, category, productId, limit } = req.query;
+    
+    try {
+        const reviews = unstructuredData.getProductReviews({
+            merchant,
+            category,
+            productId,
+            limit: limit ? parseInt(limit) : 50
+        });
+        
+        res.json({
+            success: true,
+            totalReviews: reviews.length,
+            reviews: reviews
+        });
+        
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get product reviews: ' + err.message 
+        });
+    }
+});
+
+// API: Get market reports
+app.get('/api/market-reports', (req, res) => {
+    const { category, type, impact, limit } = req.query;
+    
+    try {
+        const reports = unstructuredData.getMarketReports({
+            category,
+            type,
+            impact,
+            limit: limit ? parseInt(limit) : 50
+        });
+        
+        res.json({
+            success: true,
+            totalReports: reports.length,
+            reports: reports
+        });
+        
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'Failed to get market reports: ' + err.message 
+        });
+    }
+});
+
 // Start server
 app.listen(PORT, () => {
     console.log(`
@@ -856,12 +1119,14 @@ app.listen(PORT, () => {
 ║   🚀 Integrated Federated Dashboard Server Running        ║
 ║                                                            ║
 ║   📍 URL: http://localhost:${PORT}                           ║
-║   🔗 Connected to 2 PostgreSQL Databases                   ║
+║   🔗 Connected to 3 Data Sources:                          ║
 ║                                                            ║
-║   Database 1: supply_chain_management (Merchant_one)       ║
-║   Database 2: merchant_two_supply_chain (Merchant_two)     ║
+║   1️⃣  PostgreSQL: supply_chain_management (Merchant_one)   ║
+║   2️⃣  PostgreSQL: merchant_two_supply_chain (Merchant_two) ║
+║   3️⃣  Unstructured: Text Data (Reviews, Tickets, Social)  ║
 ║                                                            ║
 ║   🤖 Gemini AI: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not Configured'}                    ║
+║   📊 Federated Query System: Ready                         ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
     `);
