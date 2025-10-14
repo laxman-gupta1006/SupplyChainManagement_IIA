@@ -46,24 +46,26 @@ app.get('/', (req, res) => {
 // GET /api/products - Get all products with logistics data
 app.get('/api/products', async (req, res) => {
     const query = `
-        SELECT 
-            p.sku,
-            p.product_type,
-            p.price,
-            p.number_of_products_sold,
-            p.revenue_generated,
-            l.supplier_name,
-            l.location,
-            l.lead_time,
-            l.production_volumes,
-            l.manufacturing_costs,
-            l.shipping_carriers,
-            l.transportation_modes,
-            l.costs as logistics_costs,
-            (p.revenue_generated - l.manufacturing_costs - l.costs) as profit_margin
-        FROM products_sales p
-        LEFT JOIN supply_chain_logistics l ON p.sku = l.sku
-        ORDER BY p.sku
+        SELECT
+            p.item_id,
+            p.product_category,
+            p.product_name,
+            p.brand_name,
+            p.unit_cost,
+            p.quantity_sold,
+            p.total_earnings,
+            p.profit_margin,
+            v.vendor_company,
+            v.business_location,
+            v.delivery_time_days,
+            v.order_quantity,
+            v.production_cost,
+            v.logistics_partner,
+            v.shipping_method,
+            v.logistics_fee
+        FROM product_catalog p
+        LEFT JOIN vendor_management v ON p.item_id = v.item_id
+        ORDER BY p.item_id
     `;
     
     try {
@@ -75,89 +77,117 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-// PUT /api/products/:sku - Update a product
-app.put('/api/products/:sku', async (req, res) => {
-    const { sku } = req.params;
+// PUT /api/products/:item_id - Update a product (product_catalog + vendor_management)
+app.put('/api/products/:item_id', async (req, res) => {
+    const { item_id } = req.params;
     const {
-        product_type,
-        price,
-        number_of_products_sold,
-        revenue_generated,
-        supplier_name,
-        location,
-        lead_time,
-        production_volumes,
-        manufacturing_costs,
-        shipping_carriers,
-        transportation_modes,
-        logistics_costs
+        product_category,
+        unit_cost,
+        quantity_sold,
+        total_earnings,
+        profit_margin,
+        brand_name,
+        product_name,
+        vendor_company,
+        business_location,
+        delivery_time_days,
+        order_quantity,
+        production_cost,
+        logistics_partner,
+        shipping_method,
+        logistics_fee,
+        quality_rating,
+        contract_start_date,
+        payment_terms
     } = req.body;
-    
-    // Handle costs - use logistics_costs from frontend or default to 0
-    const costs = logistics_costs || 0;
-    
-    // Validate and sanitize input values
-    const sanitizedData = {
-        product_type: product_type || '',
-        price: parseFloat(price) || 0,
-        number_of_products_sold: parseInt(number_of_products_sold) || 0,
-        revenue_generated: parseFloat(revenue_generated) || 0,
-        supplier_name: supplier_name || '',
-        location: location || '',
-        lead_time: parseInt(lead_time) || 0,
-        production_volumes: parseInt(production_volumes) || 0,
-        manufacturing_costs: parseFloat(manufacturing_costs) || 0,
-        shipping_carriers: shipping_carriers || '',
-        transportation_modes: transportation_modes || '',
-        costs: parseFloat(costs) || 0
+
+    // Sanitize inputs
+    const sanitized = {
+        product_category: product_category || '',
+        unit_cost: parseFloat(unit_cost) || 0,
+        quantity_sold: parseInt(quantity_sold) || 0,
+        total_earnings: parseFloat(total_earnings) || 0,
+        profit_margin: profit_margin !== undefined ? parseFloat(profit_margin) : null,
+        brand_name: brand_name || '',
+        product_name: product_name || '',
+        vendor_company: vendor_company || '',
+        business_location: business_location || '',
+        delivery_time_days: parseInt(delivery_time_days) || 0,
+        order_quantity: parseInt(order_quantity) || 0,
+        production_cost: parseFloat(production_cost) || 0,
+        logistics_partner: logistics_partner || '',
+        shipping_method: shipping_method || '',
+        logistics_fee: parseFloat(logistics_fee) || 0,
+        quality_rating: quality_rating !== undefined ? parseFloat(quality_rating) : null,
+        contract_start_date: contract_start_date || null,
+        payment_terms: payment_terms || null
     };
 
     const client = await pool.connect();
-
     try {
-        await client.query('BEGIN');        // Update products_sales table
-        const updateProductQuery = `
-            UPDATE products_sales 
-            SET product_type = $1, price = $2, number_of_products_sold = $3, revenue_generated = $4
-            WHERE sku = $5
+        await client.query('BEGIN');
+
+        const updateProduct = `
+            UPDATE product_catalog
+            SET product_category = $1,
+                unit_cost = $2,
+                quantity_sold = $3,
+                total_earnings = $4,
+                profit_margin = $5,
+                brand_name = $6,
+                product_name = $7,
+                updated_timestamp = CURRENT_TIMESTAMP
+            WHERE item_id = $8
         `;
-        
-        await client.query(updateProductQuery, [
-            sanitizedData.product_type, 
-            sanitizedData.price, 
-            sanitizedData.number_of_products_sold, 
-            sanitizedData.revenue_generated, 
-            sku
+
+        await client.query(updateProduct, [
+            sanitized.product_category,
+            sanitized.unit_cost,
+            sanitized.quantity_sold,
+            sanitized.total_earnings,
+            sanitized.profit_margin,
+            sanitized.brand_name,
+            sanitized.product_name,
+            item_id
         ]);
 
-        // Update supply_chain_logistics table
-        const updateLogisticsQuery = `
-            UPDATE supply_chain_logistics 
-            SET supplier_name = $1, location = $2, lead_time = $3, production_volumes = $4,
-                manufacturing_costs = $5, shipping_carriers = $6, transportation_modes = $7, costs = $8
-            WHERE sku = $9
+        const upsertVendor = `
+            INSERT INTO vendor_management(
+                item_id, vendor_company, business_location, delivery_time_days,
+                order_quantity, production_cost, logistics_partner, shipping_method,
+                logistics_fee, quality_rating, contract_start_date, payment_terms
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            ON CONFLICT (item_id) DO UPDATE SET
+                vendor_company = EXCLUDED.vendor_company,
+                business_location = EXCLUDED.business_location,
+                delivery_time_days = EXCLUDED.delivery_time_days,
+                order_quantity = EXCLUDED.order_quantity,
+                production_cost = EXCLUDED.production_cost,
+                logistics_partner = EXCLUDED.logistics_partner,
+                shipping_method = EXCLUDED.shipping_method,
+                logistics_fee = EXCLUDED.logistics_fee,
+                quality_rating = EXCLUDED.quality_rating,
+                contract_start_date = EXCLUDED.contract_start_date,
+                payment_terms = EXCLUDED.payment_terms
         `;
-        
-        await client.query(updateLogisticsQuery, [
-            sanitizedData.supplier_name, 
-            sanitizedData.location, 
-            sanitizedData.lead_time, 
-            sanitizedData.production_volumes,
-            sanitizedData.manufacturing_costs, 
-            sanitizedData.shipping_carriers, 
-            sanitizedData.transportation_modes, 
-            sanitizedData.costs, 
-            sku
+
+        await client.query(upsertVendor, [
+            item_id,
+            sanitized.vendor_company,
+            sanitized.business_location,
+            sanitized.delivery_time_days,
+            sanitized.order_quantity,
+            sanitized.production_cost,
+            sanitized.logistics_partner,
+            sanitized.shipping_method,
+            sanitized.logistics_fee,
+            sanitized.quality_rating,
+            sanitized.contract_start_date,
+            sanitized.payment_terms
         ]);
 
         await client.query('COMMIT');
-        
-        res.json({ 
-            success: true, 
-            message: 'Product updated successfully',
-            sku: sku 
-        });
-        
+        res.json({ success: true, message: 'Product updated successfully', item_id });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Update error:', err);
@@ -167,34 +197,21 @@ app.put('/api/products/:sku', async (req, res) => {
     }
 });
 
-// DELETE /api/products/:sku - Delete a product
-app.delete('/api/products/:sku', async (req, res) => {
-    const { sku } = req.params;
-    
+// DELETE /api/products/:item_id - Delete a product
+app.delete('/api/products/:item_id', async (req, res) => {
+    const { item_id } = req.params;
     const client = await pool.connect();
-    
     try {
         await client.query('BEGIN');
-
-        // Delete from supply_chain_logistics first (foreign key constraint)
-        await client.query('DELETE FROM supply_chain_logistics WHERE sku = $1', [sku]);
-        
-        // Delete from products_sales
-        const result = await client.query('DELETE FROM products_sales WHERE sku = $1', [sku]);
-        
+        // Delete vendor first due to FK
+        await client.query('DELETE FROM vendor_management WHERE item_id = $1', [item_id]);
+        const result = await client.query('DELETE FROM product_catalog WHERE item_id = $1', [item_id]);
         if (result.rowCount === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ error: 'Product not found' });
         }
-
         await client.query('COMMIT');
-        
-        res.json({ 
-            success: true, 
-            message: 'Product deleted successfully',
-            sku: sku 
-        });
-        
+        res.json({ success: true, message: 'Product deleted successfully', item_id });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Delete error:', err);
@@ -208,19 +225,19 @@ app.delete('/api/products/:sku', async (req, res) => {
 app.get('/api/stats', async (req, res) => {
     try {
         // Get total products
-        const totalProductsQuery = 'SELECT COUNT(*) as count FROM products_sales';
+        const totalProductsQuery = 'SELECT COUNT(*) as count FROM product_catalog';
         const totalProducts = await pool.query(totalProductsQuery);
         
         // Get total revenue
-        const totalRevenueQuery = 'SELECT SUM(revenue_generated) as total FROM products_sales';
+        const totalRevenueQuery = 'SELECT SUM(total_earnings) as total FROM product_catalog';
         const totalRevenue = await pool.query(totalRevenueQuery);
         
-        // Get average price
-        const avgPriceQuery = 'SELECT AVG(price) as avg FROM products_sales';
+        // Get average unit cost
+        const avgPriceQuery = 'SELECT AVG(unit_cost) as avg FROM product_catalog';
         const avgPrice = await pool.query(avgPriceQuery);
         
-        // Get distinct product types
-        const productTypesQuery = 'SELECT DISTINCT product_type FROM products_sales ORDER BY product_type';
+        // Get distinct product categories
+        const productTypesQuery = 'SELECT DISTINCT product_category FROM product_catalog ORDER BY product_category';
         const productTypes = await pool.query(productTypesQuery);
         
         res.json({
@@ -240,47 +257,47 @@ app.get('/api/analytics', async (req, res) => {
     const queries = {
         productTypeSummary: `
             SELECT 
-                p.product_type,
+                p.product_category,
                 COUNT(*) as total_products,
-                AVG(p.price) as avg_price,
-                SUM(p.number_of_products_sold) as total_units_sold,
-                SUM(p.revenue_generated) as total_revenue
-            FROM products_sales p
-            GROUP BY p.product_type
+                AVG(p.unit_cost) as avg_unit_cost,
+                SUM(p.quantity_sold) as total_units_sold,
+                SUM(p.total_earnings) as total_revenue
+            FROM product_catalog p
+            GROUP BY p.product_category
             ORDER BY total_revenue DESC
         `,
         supplierPerformance: `
             SELECT 
-                l.supplier_name,
-                l.location,
+                v.vendor_company,
+                v.business_location,
                 COUNT(*) as products_supplied,
-                AVG(l.lead_time) as avg_lead_time,
-                AVG(l.manufacturing_costs) as avg_manufacturing_costs,
-                SUM(p.revenue_generated) as total_revenue_generated
-            FROM supply_chain_logistics l
-            JOIN products_sales p ON l.sku = p.sku
-            GROUP BY l.supplier_name, l.location
+                AVG(v.delivery_time_days) as avg_delivery_time_days,
+                AVG(v.production_cost) as avg_production_cost,
+                SUM(p.total_earnings) as total_revenue_generated
+            FROM vendor_management v
+            JOIN product_catalog p ON v.item_id = p.item_id
+            GROUP BY v.vendor_company, v.business_location
             ORDER BY total_revenue_generated DESC
         `,
         topProfitableProducts: `
             SELECT 
-                p.sku,
-                p.product_type,
-                p.price,
-                (p.revenue_generated - l.manufacturing_costs - l.costs) as profit_margin
-            FROM products_sales p
-            JOIN supply_chain_logistics l ON p.sku = l.sku
+                p.item_id,
+                p.product_category,
+                p.unit_cost,
+                (p.total_earnings - v.production_cost - v.logistics_fee) as profit_margin
+            FROM product_catalog p
+            JOIN vendor_management v ON p.item_id = v.item_id
             ORDER BY profit_margin DESC
             LIMIT 10
         `,
         transportationAnalysis: `
             SELECT 
-                transportation_modes,
+                shipping_method,
                 COUNT(*) as usage_count,
-                AVG(costs) as avg_logistics_cost,
-                AVG(lead_time) as avg_lead_time
-            FROM supply_chain_logistics
-            GROUP BY transportation_modes
+                AVG(logistics_fee) as avg_logistics_fee,
+                AVG(delivery_time_days) as avg_delivery_time_days
+            FROM vendor_management
+            GROUP BY shipping_method
             ORDER BY usage_count DESC
         `
     };

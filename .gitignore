@@ -146,3 +146,44 @@ tramp
 
 # JetBrains
 .idea/
+
+# ----------------------------
+# Helper files & generated data (ignore by default)
+# Keep main source files tracked. If you want to track more helper files,
+# add explicit negation rules below.
+# ----------------------------
+
+# Schema evolution backups and SQL dumps
+schema_backups/
+**/schema_backups/
+*.sql
+*.bak
+
+# Local database files / sqlite / dumps
+*.sqlite
+*.db
+*.dump
+
+# Datasets and large CSVs (example: Dataset/ directories)
+Dataset/
+**/Dataset/
+*.csv
+
+# Generated schema evolution artifacts and helper scripts (ignored by default)
+SCHEMA_EVOLUTION.md
+schema_evolution.js
+evolve_schema.sh
+migrate_to_postgresql.js
+server_sqlite_backup.js
+
+# Explicitly ignore Merchant_one helper/evolution files
+# These are local scripts, backups and generated docs that should not be committed
+/Merchant_one/schema_evolution.js
+/Merchant_one/evolve_schema.sh
+/Merchant_one/SCHEMA_EVOLUTION.md
+/Merchant_one/migrate_to_postgresql.js
+/Merchant_one/server_sqlite_backup.js
+/Merchant_one/POSTGRESQL_ACCESS.md
+/Merchant_one/NETWORK_ACCESS.md
+
+# ----------------------------
