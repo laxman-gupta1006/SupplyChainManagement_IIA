@@ -128,25 +128,124 @@ app.use(express.static('public'));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+// Helper function to generate dynamic key mappings between merchants
+function generateKeyMappings(merchant1Schema, merchant2Schema) {
+    if (!merchant1Schema || !merchant2Schema || !merchant1Schema.tables || !merchant2Schema.tables) {
+        return '(Mappings loading...)';
+    }
+    
+    const mappings = [];
+    const commonMappings = [
+        { m1: ['item_id', 'sku', 'product_id'], m2: ['product_id'], label: 'Product ID' },
+        { m1: ['product_category', 'product_type', 'category'], m2: ['category'], label: 'Category/Type', note: '⚠️ Both contain: cosmetics, skincare, haircare' },
+        { m1: ['unit_cost', 'price'], m2: ['unit_price'], label: 'Price/Cost' },
+        { m1: ['quantity_sold', 'units_sold'], m2: ['units_sold'], label: 'Quantity Sold' },
+        { m1: ['total_earnings', 'revenue_generated', 'revenue'], m2: ['sales_revenue'], label: 'Revenue' },
+        { m1: ['vendor_company', 'supplier_name'], m2: ['vendor_name'], label: 'Vendor/Supplier' },
+        { m1: ['business_location', 'location'], m2: ['facility_location'], label: 'Location' },
+        { m1: ['freight_cost', 'costs'], m2: ['freight_charges'], label: 'Freight/Costs' },
+        { m1: ['quality_rating'], m2: ['quality_score'], label: 'Quality Rating' }
+    ];
+    
+    // Get all columns from both merchants
+    const m1Columns = new Set();
+    const m2Columns = new Set();
+    
+    Object.values(merchant1Schema.tables).forEach(table => {
+        table.columns.forEach(col => m1Columns.add(col.name));
+    });
+    
+    Object.values(merchant2Schema.tables).forEach(table => {
+        table.columns.forEach(col => m2Columns.add(col.name));
+    });
+    
+    // Find actual mappings from common patterns
+    commonMappings.forEach(mapping => {
+        const m1Col = mapping.m1.find(col => m1Columns.has(col));
+        const m2Col = mapping.m2.find(col => m2Columns.has(col));
+        
+        if (m1Col && m2Col) {
+            let mappingStr = `- Merchant_one uses "${m1Col}" ↔ Merchant_two uses "${m2Col}"`;
+            if (mapping.note) {
+                mappingStr += `\n  ${mapping.note}`;
+            }
+            mappings.push(mappingStr);
+        }
+    });
+    
+    if (mappings.length === 0) {
+        return '(No common column mappings detected)';
+    }
+    
+    return mappings.join('\n');
+}
+
 // Dynamic schema context generator function
 function getCurrentSchemaContext() {
+    // Get current dynamic schemas
+    const merchant1Schema = schemaManager.getSchema('merchant1');
+    const merchant2Schema = schemaManager.getSchema('merchant2');
+    
+    // Generate dynamic schema descriptions
+    let merchant1SchemaDesc = 'MERCHANT_ONE DATABASE (supply_chain_management):\nTables:\n';
+    let merchant2SchemaDesc = 'MERCHANT_TWO DATABASE (merchant_two_supply_chain):\nTables:\n';
+    
+    if (merchant1Schema && merchant1Schema.tables) {
+        let tableIndex = 1;
+        for (const [tableName, tableInfo] of Object.entries(merchant1Schema.tables)) {
+            merchant1SchemaDesc += `${tableIndex}. ${tableName} (`;
+            const columnDescs = tableInfo.columns.map(col => {
+                let typeDesc = (col.dataType || col.type || 'VARCHAR').toUpperCase();
+                if (col.isPrimaryKey) typeDesc += ' PRIMARY KEY';
+                return `${col.name} ${typeDesc}`;
+            });
+            merchant1SchemaDesc += columnDescs.join(', ') + ')\n';
+            
+            // Add special notes for category columns
+            const categoryCol = tableInfo.columns.find(c => 
+                c.name.includes('category') || c.name.includes('type')
+            );
+            if (categoryCol) {
+                merchant1SchemaDesc += `   - ${categoryCol.name} contains: 'cosmetics', 'skincare', 'haircare'\n`;
+            }
+            tableIndex++;
+        }
+    } else {
+        merchant1SchemaDesc += '(Schema loading...)\n';
+    }
+    
+    if (merchant2Schema && merchant2Schema.tables) {
+        let tableIndex = 1;
+        for (const [tableName, tableInfo] of Object.entries(merchant2Schema.tables)) {
+            merchant2SchemaDesc += `${tableIndex}. ${tableName} (`;
+            const columnDescs = tableInfo.columns.map(col => {
+                let typeDesc = (col.dataType || col.type || 'VARCHAR').toUpperCase();
+                if (col.isPrimaryKey) typeDesc += ' PRIMARY KEY';
+                return `${col.name} ${typeDesc}`;
+            });
+            merchant2SchemaDesc += columnDescs.join(', ') + ')\n';
+            
+            // Add special notes for category columns
+            const categoryCol = tableInfo.columns.find(c => 
+                c.name.includes('category') || c.name.includes('type')
+            );
+            if (categoryCol) {
+                merchant2SchemaDesc += `   - ${categoryCol.name} contains: 'cosmetics', 'skincare', 'haircare' (SAME values as Merchant_one!)\n`;
+            }
+            tableIndex++;
+        }
+    } else {
+        merchant2SchemaDesc += '(Schema loading...)\n';
+    }
+    
     return `
 You are a query generator for a federated supply chain system with THREE data sources:
 
 DATA SOURCE 1 - MERCHANT_ONE DATABASE (supply_chain_management):
 PostgreSQL database with structured relational data.
 
-MERCHANT_ONE DATABASE (supply_chain_management):
-Tables:
-1. products_sales (sku VARCHAR PRIMARY KEY, product_type VARCHAR, price DECIMAL, number_of_products_sold INTEGER, revenue_generated DECIMAL)
-   - product_type contains: 'cosmetics', 'skincare', 'haircare'
-2. supply_chain_logistics (sku VARCHAR PRIMARY KEY, supplier_name VARCHAR, location VARCHAR, lead_time INTEGER, production_volumes INTEGER, manufacturing_costs DECIMAL, shipping_carriers VARCHAR, transportation_modes VARCHAR, costs DECIMAL)
-
-MERCHANT_TWO DATABASE (merchant_two_supply_chain):
-Tables:
-1. products (product_id VARCHAR PRIMARY KEY, category VARCHAR, unit_price DECIMAL, units_sold INTEGER, sales_revenue DECIMAL, profit_margin DECIMAL, stock_level INTEGER, product_status VARCHAR, seasonal_demand VARCHAR)
-   - category contains: 'cosmetics', 'skincare', 'haircare' (SAME values as Merchant_one's product_type!)
-2. supply_chain (id SERIAL PRIMARY KEY, product_id VARCHAR, vendor_name VARCHAR, facility_location VARCHAR, processing_days INTEGER, output_quantity INTEGER, production_expenses DECIMAL, logistics_provider VARCHAR, shipping_method VARCHAR, freight_charges DECIMAL, quality_score DECIMAL, reorder_point INTEGER, warehouse_zone VARCHAR, sustainability_index INTEGER)
+${merchant1SchemaDesc}
+${merchant2SchemaDesc}
 
 DATA SOURCE 3 - UNSTRUCTURED DATA (Text Data):
 Contains 3000+ entries of customer feedback, support tickets, social media posts, and market reports.
@@ -163,17 +262,8 @@ Types available:
 - Market trends, consumer behavior, industry insights
 - Qualitative data, unstructured information, customer voices
 
-KEY MAPPINGS:
-- Merchant_one uses "sku" ↔ Merchant_two uses "product_id"
-- Merchant_one uses "product_type" ↔ Merchant_two uses "category"
-  ⚠️ IMPORTANT: Both contain the SAME values: 'cosmetics', 'skincare', 'haircare'
-  When querying for specific product types/categories, query BOTH databases!
-- Merchant_one uses "price" ↔ Merchant_two uses "unit_price"
-- Merchant_one uses "number_of_products_sold" ↔ Merchant_two uses "units_sold"
-- Merchant_one uses "revenue_generated" ↔ Merchant_two uses "sales_revenue"
-- Merchant_one uses "supplier_name" ↔ Merchant_two uses "vendor_name"
-- Merchant_one uses "location" ↔ Merchant_two uses "facility_location"
-- Merchant_one uses "costs" ↔ Merchant_two uses "freight_charges"
+KEY MAPPINGS (Auto-discovered from schemas):
+${generateKeyMappings(merchant1Schema, merchant2Schema)}
 
 🚨 CRITICAL RULE - NO SCHEMA PREFIXES:
 - Write table names WITHOUT any database/schema prefix
