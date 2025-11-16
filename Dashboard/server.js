@@ -4,13 +4,80 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
+const http = require('http');
+const WebSocket = require('ws');
 const UniversalIntelligentSearch = require('./intelligent-search');
 const DynamicSchemaManager = require('./dynamic-schema-manager');
 const UnstructuredDataHandler = require('./unstructured-data-handler');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 const PORT = process.env.PORT || 4000;
+
+// WebSocket clients tracking
+const wsClients = new Set();
+
+wss.on('connection', (ws) => {
+    wsClients.add(ws);
+    console.log('Client connected to real-time log stream');
+    
+    ws.on('close', () => {
+        wsClients.delete(ws);
+        console.log('Client disconnected from log stream');
+    });
+});
+
+// Override console.log to broadcast to WebSocket clients
+const originalConsoleLog = console.log;
+console.log = function(...args) {
+    let message = args.map(arg => {
+        if (typeof arg === 'object') {
+            try {
+                const str = JSON.stringify(arg, null, 2);
+                // Truncate very long messages
+                return str.length > 500 ? str.substring(0, 500) + '...(truncated)' : str;
+            } catch (e) {
+                return String(arg);
+            }
+        }
+        return String(arg);
+    }).join(' ');
+    
+    originalConsoleLog.apply(console, args);
+    
+    // Determine log type based on content
+    let logType = 'system';
+    if (message.includes('AI Response') || message.includes('Analyzing query')) {
+        logType = 'ai';
+    } else if (message.includes('Processing query')) {
+        logType = 'query';
+    } else if (message.includes('Got') && message.includes('results')) {
+        logType = 'result';
+    } else if (message.includes('Error') || message.includes('failed')) {
+        logType = 'error';
+    } else if (message.includes('Executing') || message.includes('Querying') || message.includes('UNIFIED')) {
+        logType = 'system';
+    } else if (message.includes('Query executed successfully') || message.includes('completed')) {
+        logType = 'result';
+    }
+    
+    // Broadcast to WebSocket clients
+    wsClients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            try {
+                client.send(JSON.stringify({
+                    type: logType,
+                    message: message,
+                    timestamp: new Date().toISOString()
+                }));
+            } catch (err) {
+                // Ignore send errors
+            }
+        }
+    });
+};
 
 // Initialize Dynamic Schema Manager
 const schemaManager = new DynamicSchemaManager();
@@ -1455,8 +1522,8 @@ app.get('/api/market-reports', (req, res) => {
     }
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server with WebSocket support
+server.listen(PORT, () => {
     console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
@@ -1471,6 +1538,7 @@ app.listen(PORT, () => {
 ║                                                            ║
 ║   🤖 Gemini AI: ${apiKeys.length > 0 ? `✅ ${apiKeys.length} API Keys Configured (Rotation Enabled)` : '❌ Not Configured'}    ║
 ║   📊 Federated Query System: Ready                         ║
+║   🔴 WebSocket: Live Logging Enabled                       ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
     `);
@@ -1479,6 +1547,13 @@ app.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down gracefully...');
+    
+    // Close WebSocket connections
+    wsClients.forEach(client => {
+        client.close();
+    });
+    wss.close();
+    
     await merchant1Pool.end();
     await merchant2Pool.end();
     process.exit(0);

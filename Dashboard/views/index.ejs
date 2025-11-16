@@ -624,49 +624,108 @@
 
         /* AI Thinking Stage Display */
         .thinking-stage {
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
-            border: 1px solid rgba(99, 102, 241, 0.2);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
             animation: fadeIn 0.3s ease-in;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
         }
 
         .thinking-header {
             display: flex;
             align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .thinking-title {
+            display: flex;
+            align-items: center;
             gap: 12px;
-            margin-bottom: 16px;
             font-weight: 600;
             font-size: 1.1rem;
-            color: var(--primary-color);
+            color: var(--text-primary);
         }
 
         .thinking-icon {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--primary-color);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .thinking-status {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            background: rgba(99, 102, 241, 0.1);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--primary-color);
             animation: pulse 2s ease-in-out infinite;
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .thinking-content {
+            max-height: 500px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+        }
+
+        .thinking-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .thinking-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .thinking-content::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.3);
+            border-radius: 3px;
         }
 
         .thinking-step {
             display: flex;
             align-items: flex-start;
-            gap: 12px;
-            padding: 12px;
-            margin-bottom: 8px;
-            background: rgba(255, 255, 255, 0.02);
-            border-left: 3px solid var(--primary-color);
-            border-radius: 6px;
+            gap: 14px;
+            padding: 14px;
+            margin-bottom: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 3px solid transparent;
+            border-radius: 8px;
+            transition: all 0.3s ease;
             animation: slideIn 0.3s ease-out;
         }
 
         @keyframes slideIn {
             from {
                 opacity: 0;
-                transform: translateX(-10px);
+                transform: translateX(-20px);
             }
             to {
                 opacity: 1;
@@ -674,34 +733,80 @@
             }
         }
 
+        .thinking-step:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
         .thinking-step-icon {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            flex-shrink: 0;
             margin-top: 2px;
-            color: var(--primary-color);
-            font-size: 1rem;
+        }
+
+        .thinking-step.query .thinking-step-icon {
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+            border-left-color: #818cf8;
+        }
+
+        .thinking-step.ai .thinking-step-icon {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            border-left-color: #a78bfa;
+        }
+
+        .thinking-step.system .thinking-step-icon {
+            background: rgba(6, 182, 212, 0.15);
+            color: #22d3ee;
+            border-left-color: #22d3ee;
+        }
+
+        .thinking-step.result .thinking-step-icon {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border-left-color: #34d399;
+        }
+
+        .thinking-step.error .thinking-step-icon {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border-left-color: #f87171;
         }
 
         .thinking-step-content {
             flex: 1;
+            min-width: 0;
         }
 
         .thinking-step-title {
             font-weight: 600;
             color: var(--text-primary);
-            margin-bottom: 4px;
+            margin-bottom: 6px;
+            font-size: 0.95rem;
         }
 
         .thinking-step-detail {
-            font-size: 0.9rem;
+            font-size: 0.875rem;
             color: var(--text-secondary);
             font-family: 'Courier New', monospace;
+            line-height: 1.6;
+            word-break: break-word;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-top: 6px;
         }
 
-        .thinking-step.success {
-            border-left-color: var(--secondary-color);
-        }
-
-        .thinking-step.success .thinking-step-icon {
-            color: var(--secondary-color);
+        .thinking-step-time {
+            font-size: 0.75rem;
+            color: rgba(203, 213, 225, 0.5);
+            margin-top: 4px;
         }
 
         .thinking-complete {
@@ -711,28 +816,47 @@
             padding: 16px;
             background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1));
             border: 1px solid rgba(16, 185, 129, 0.3);
-            border-radius: 8px;
-            margin-top: 12px;
-            color: var(--secondary-color);
+            border-radius: 10px;
+            margin-top: 16px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .thinking-complete-icon {
+            width: 32px;
+            height: 32px;
+            background: rgba(16, 185, 129, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #34d399;
+            font-size: 1.1rem;
+        }
+
+        .thinking-complete-text {
+            flex: 1;
             font-weight: 600;
+            color: #34d399;
         }
 
         .collapse-button {
             background: rgba(99, 102, 241, 0.1);
             border: 1px solid rgba(99, 102, 241, 0.3);
-            border-radius: 6px;
-            padding: 8px 16px;
+            border-radius: 8px;
+            padding: 10px 20px;
             color: var(--primary-color);
             cursor: pointer;
             transition: all 0.3s ease;
-            margin-top: 12px;
+            margin-top: 16px;
             font-size: 0.9rem;
             width: 100%;
             text-align: center;
+            font-weight: 500;
         }
 
         .collapse-button:hover {
             background: rgba(99, 102, 241, 0.2);
+            transform: translateY(-1px);
         }
 
         .thinking-stage.collapsed .thinking-content {
@@ -741,6 +865,12 @@
 
         .thinking-stage.collapsed .thinking-header {
             margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .thinking-stage.collapsed .collapse-button {
+            margin-top: 12px;
         }
 
         .aggregated-result {
@@ -1150,6 +1280,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadStats();
             setupEventListeners();
+            connectWebSocket();
         });
 
         function setupEventListeners() {
@@ -1217,6 +1348,170 @@
             }
         }
 
+        // WebSocket connection for real-time logs
+        let ws = null;
+        let thinkingSteps = [];
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleRealtimeLog(data);
+                } catch (err) {
+                    console.error('WebSocket message error:', err);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                // Attempt to reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        function handleRealtimeLog(data) {
+            const thinkingContent = document.getElementById('thinkingContent');
+            if (!thinkingContent) return;
+            
+            const { type, message, timestamp } = data;
+            
+            // Filter out system initialization logs
+            if (!document.getElementById('queryBtn').disabled) return;
+            
+            // Parse message for title and detail
+            let title = '';
+            let detail = '';
+            
+            // Handle different log formats
+            if (message.includes('Processing query:')) {
+                title = 'Analyzing Query';
+                const match = message.match(/Processing query: "([^"]+)"/);
+                if (match) {
+                    detail = `User question: "${match[1]}"`;
+                }
+            } else if (message.includes('Analyzing query with intelligent search')) {
+                title = 'Running Intelligent Search';
+                detail = 'Finding semantic matches and patterns across databases';
+            } else if (message.includes('Found') && message.includes('intelligent matches')) {
+                const match = message.match(/Found (\d+) intelligent matches/);
+                if (match) {
+                    title = 'Intelligent Search Complete';
+                    detail = `Found ${match[1]} relevant semantic matches`;
+                }
+            } else if (message.includes('AI Response:') || message.includes('AI Response Generated')) {
+                title = 'AI Query Plan Generated';
+                // Try to extract key info from JSON
+                const jsonMatch = message.match(/\{[^}]*"target"[^}]*\}/);
+                if (jsonMatch) {
+                    try {
+                        const parsed = JSON.parse(jsonMatch[0]);
+                        detail = `Target: ${parsed.target}${parsed.use_unified_query ? ' (Unified Query)' : ''}`;
+                    } catch (e) {
+                        detail = 'SQL queries generated for database execution';
+                    }
+                } else {
+                    detail = 'SQL queries generated for database execution';
+                }
+            } else if (message.includes('Executing UNIFIED query')) {
+                title = 'Executing Unified Query';
+                detail = 'Combining data from both merchants with normalized columns';
+            } else if (message.includes('Executing Merchant_one')) {
+                title = 'Querying Merchant One';
+                detail = 'Executing SQL on product_catalog and vendor_management';
+            } else if (message.includes('Executing Merchant_two')) {
+                title = 'Querying Merchant Two';
+                detail = 'Executing SQL on products and supply_chain';
+            } else if (message.includes('Got') && message.includes('results from')) {
+                const merchantMatch = message.match(/Got (\d+) results from (Merchant_\w+)/);
+                if (merchantMatch) {
+                    title = `${merchantMatch[2]} Results Retrieved`;
+                    detail = `Successfully fetched ${merchantMatch[1]} rows`;
+                }
+            } else if (message.includes('Combined results:')) {
+                const match = message.match(/Combined results: (\d+) total rows/);
+                if (match) {
+                    title = 'Results Combined';
+                    detail = `Merged ${match[1]} total rows from both merchants`;
+                }
+            } else if (message.includes('Generated insight:')) {
+                title = 'AI Insights Generated';
+                const insightText = message.replace(/Generated insight:\s*/i, '').substring(0, 150);
+                detail = insightText + (insightText.length === 150 ? '...' : '');
+            } else if (message.includes('Query executed successfully')) {
+                title = 'Query Execution Complete';
+                detail = 'All operations completed successfully';
+            } else if (message.includes('Rotating to API key')) {
+                title = 'API Key Rotation';
+                detail = message.replace(/🔄\s*/g, '');
+            } else {
+                // Generic fallback
+                title = message.substring(0, 60).replace(/[🔍🧠🤖📊📄🔗✅❌⚠️💡🎉🔄]/g, '').trim();
+                if (message.length > 60) {
+                    detail = message.substring(60, 200).trim();
+                }
+            }
+            
+            // Skip if we already have this exact message
+            if (thinkingSteps.includes(title + detail)) return;
+            thinkingSteps.push(title + detail);
+            
+            // Don't add empty steps
+            if (!title && !detail) return;
+            
+            addRealtimeStep(title, detail, type, timestamp);
+        }
+
+        function addRealtimeStep(title, detail, stepType, timestamp) {
+            const thinkingContent = document.getElementById('thinkingContent');
+            if (!thinkingContent) return;
+            
+            const iconMap = {
+                query: '🔍',
+                ai: '🤖',
+                system: '⚙️',
+                result: '✓',
+                error: '✗'
+            };
+            
+            const icon = iconMap[stepType] || '•';
+            const time = new Date(timestamp).toLocaleTimeString();
+            
+            const step = document.createElement('div');
+            step.className = `thinking-step ${stepType}`;
+            step.innerHTML = `
+                <div class="thinking-step-icon">${icon}</div>
+                <div class="thinking-step-content">
+                    <div class="thinking-step-title">${escapeHtml(title)}</div>
+                    ${detail ? `<div class="thinking-step-detail">${escapeHtml(detail)}</div>` : ''}
+                    <div class="thinking-step-time">${time}</div>
+                </div>
+            `;
+            
+            thinkingContent.appendChild(step);
+            
+            // Auto-scroll to bottom
+            const thinkingStage = document.getElementById('thinkingStage');
+            if (thinkingStage) {
+                const content = thinkingStage.querySelector('.thinking-content');
+                if (content) {
+                    content.scrollTop = content.scrollHeight;
+                }
+            }
+        }
+
         async function executeQuery() {
             const queryInput = document.getElementById('queryInput');
             const question = queryInput.value.trim();
@@ -1235,29 +1530,27 @@
             
             resultsSection.classList.add('show');
             
-            // Show AI thinking stage
+            // Reset thinking steps
+            thinkingSteps = [];
+            
+            // Show AI thinking stage with real-time logs
             resultsContent.innerHTML = `
                 <div class="thinking-stage" id="thinkingStage">
                     <div class="thinking-header">
-                        <i class="fas fa-brain thinking-icon"></i>
-                        AI is thinking...
+                        <div class="thinking-title">
+                            <div class="thinking-icon"></div>
+                            <span>Query Processing</span>
+                        </div>
+                        <div class="thinking-status">
+                            <div class="status-indicator"></div>
+                            <span>In Progress</span>
+                        </div>
                     </div>
                     <div class="thinking-content" id="thinkingContent"></div>
                 </div>
             `;
 
-            const thinkingContent = document.getElementById('thinkingContent');
-            
-            // Simulate progressive thinking steps
-            addThinkingStep('🔍 Analyzing query...', 'Processing natural language input');
-            await sleep(300);
-            
-            addThinkingStep('🧠 Running intelligent search...', 'Finding semantic matches and fuzzy patterns');
-            await sleep(300);
-
             try {
-                addThinkingStep('🤖 Generating SQL queries with AI...', 'Using Gemini AI for query generation');
-                
                 const response = await fetch('/api/query', {
                     method: 'POST',
                     headers: {
@@ -1272,50 +1565,43 @@
                     throw new Error(data.error || 'Query failed');
                 }
 
-                // Show AI response
-                if (data.queries && data.queries.merchant1) {
-                    addThinkingStep('✅ AI response received', 
-                        `Generated queries for ${data.target === 'both' ? 'both merchants' : data.target}`,
-                        'success');
+                // Wait a bit for WebSocket logs to finish
+                await sleep(500);
+
+                // Mark as complete
+                const thinkingContent = document.getElementById('thinkingContent');
+                if (thinkingContent) {
+                    thinkingContent.innerHTML += `
+                        <div class="thinking-complete">
+                            <div class="thinking-complete-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="thinking-complete-text">
+                                Processing complete! Insights generated successfully.
+                            </div>
+                        </div>
+                        <button class="collapse-button" onclick="toggleThinkingStage()">
+                            <i class="fas fa-chevron-up"></i> Hide Process Details
+                        </button>
+                    `;
                 }
 
-                // Show execution steps
-                if (data.use_unified_query) {
-                    addThinkingStep('🔗 Executing unified query...', 
-                        `Combining data from both merchants`,
-                        'success');
-                } else if (data.target === 'both') {
-                    addThinkingStep('📊 Querying multiple databases...', 
-                        `Executing on Merchant_one and Merchant_two`,
-                        'success');
-                } else {
-                    addThinkingStep('📊 Querying database...', 
-                        `Executing on ${data.target}`,
-                        'success');
+                // Update status
+                const statusEl = document.querySelector('.thinking-status span');
+                const statusIndicator = document.querySelector('.status-indicator');
+                if (statusEl) {
+                    statusEl.textContent = 'Complete';
+                    statusIndicator.style.background = 'var(--success-color)';
+                    statusIndicator.style.animation = 'none';
+                }
+
+                // Update header icon
+                const thinkingIcon = document.querySelector('.thinking-icon');
+                if (thinkingIcon) {
+                    thinkingIcon.style.display = 'none';
                 }
 
                 await sleep(200);
-
-                // Show results count
-                const totalResults = (data.results.combined?.length || 0) + 
-                                   (data.results.merchant1?.length || 0) + 
-                                   (data.results.merchant2?.length || 0);
-                addThinkingStep('🎉 Query completed', 
-                    `Retrieved ${totalResults} results`,
-                    'success');
-
-                // Add completion banner
-                thinkingContent.innerHTML += `
-                    <div class="thinking-complete">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Processing complete! Generated insights below.</span>
-                    </div>
-                    <button class="collapse-button" onclick="toggleThinkingStage()">
-                        <i class="fas fa-chevron-up"></i> Collapse thinking process
-                    </button>
-                `;
-
-                await sleep(500);
 
                 currentQuery = data;
                 displayResults(data);
@@ -1327,7 +1613,7 @@
                     <div class="no-results">
                         <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: var(--error-color); margin-bottom: 16px;"></i>
                         <h3>Query Failed</h3>
-                        <p>${error.message}</p>
+                        <p>${escapeHtml(error.message)}</p>
                     </div>
                 `;
                 showToast('Query failed: ' + error.message, 'error');
@@ -1338,27 +1624,6 @@
         }
 
         // Helper function for thinking stage
-        function addThinkingStep(title, detail, status = 'processing') {
-            const thinkingContent = document.getElementById('thinkingContent');
-            if (!thinkingContent) return;
-            
-            const icon = status === 'success' ? 'fa-check-circle' : 'fa-spinner fa-spin';
-            const stepClass = status === 'success' ? 'thinking-step success' : 'thinking-step';
-            
-            const step = document.createElement('div');
-            step.className = stepClass;
-            step.innerHTML = `
-                <i class="fas ${icon} thinking-step-icon"></i>
-                <div class="thinking-step-content">
-                    <div class="thinking-step-title">${title}</div>
-                    ${detail ? `<div class="thinking-step-detail">${detail}</div>` : ''}
-                </div>
-            `;
-            
-            thinkingContent.appendChild(step);
-            step.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }
-
         function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
@@ -1372,10 +1637,10 @@
                     const icon = button.querySelector('i');
                     if (thinkingStage.classList.contains('collapsed')) {
                         icon.className = 'fas fa-chevron-down';
-                        button.innerHTML = '<i class="fas fa-chevron-down"></i> Expand thinking process';
+                        button.innerHTML = '<i class="fas fa-chevron-down"></i> Show Process Details';
                     } else {
                         icon.className = 'fas fa-chevron-up';
-                        button.innerHTML = '<i class="fas fa-chevron-up"></i> Collapse thinking process';
+                        button.innerHTML = '<i class="fas fa-chevron-up"></i> Hide Process Details';
                     }
                 }
             }
@@ -1383,6 +1648,7 @@
 
         function displayResults(data) {
             const resultsContent = document.getElementById('resultsContent');
+            const thinkingStage = document.getElementById('thinkingStage');
             
             // Append to existing thinking stage (don't replace it)
             let html = '';
