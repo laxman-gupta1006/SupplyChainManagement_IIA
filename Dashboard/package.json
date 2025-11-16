@@ -19,7 +19,7 @@
   "author": "Supply Chain Management Team",
   "license": "MIT",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.29.1",
     "alasql": "^4.6.6",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",

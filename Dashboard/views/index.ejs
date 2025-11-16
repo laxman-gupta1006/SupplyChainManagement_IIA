@@ -888,7 +888,7 @@
             </div>
         </div>
 
-        <!-- Statistics Dashboard
+        <!-- Statistics Dashboard -->
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card">
                 <div class="stat-label">Total Products</div>
@@ -949,7 +949,7 @@
                     </div>
                 </div>
             </div>
-        </div> -->
+        </div>
 
         <!-- Query Section -->
         <div class="query-section">
@@ -1196,34 +1196,50 @@
 
             html += '<div class="result-grid">';
 
-            // Merchant 1 results
-            if (data.results.merchant1 && data.results.merchant1.length > 0) {
+            // 🎯 Combined results from unified query (takes priority)
+            if (data.use_unified_query && data.results.combined && data.results.combined.length > 0) {
                 html += `
-                    <div class="result-merchant-section merchant1">
+                    <div class="result-merchant-section combined">
                         <div class="merchant-header">
-                            <div class="merchant-badge merchant1-badge"></div>
-                            <h4>Merchant_one Results (${data.results.merchant1.length})</h4>
+                            <div class="merchant-badge combined-badge" style="background: linear-gradient(135deg, #6366f1, #10b981);"></div>
+                            <h4>📊 Combined Results (${data.results.combined.length} total)</h4>
                         </div>
                         <div class="result-table-container">
-                            ${generateTable(data.results.merchant1)}
+                            ${generateTable(data.results.combined, true)}
                         </div>
                     </div>
                 `;
-            }
+            } else {
+                // Original separate results display
+                // Merchant 1 results
+                if (data.results.merchant1 && data.results.merchant1.length > 0) {
+                    html += `
+                        <div class="result-merchant-section merchant1">
+                            <div class="merchant-header">
+                                <div class="merchant-badge merchant1-badge"></div>
+                                <h4>Merchant_one Results (${data.results.merchant1.length})</h4>
+                            </div>
+                            <div class="result-table-container">
+                                ${generateTable(data.results.merchant1)}
+                            </div>
+                        </div>
+                    `;
+                }
 
-            // Merchant 2 results
-            if (data.results.merchant2 && data.results.merchant2.length > 0) {
-                html += `
-                    <div class="result-merchant-section merchant2">
-                        <div class="merchant-header">
-                            <div class="merchant-badge merchant2-badge"></div>
-                            <h4>Merchant_two Results (${data.results.merchant2.length})</h4>
+                // Merchant 2 results
+                if (data.results.merchant2 && data.results.merchant2.length > 0) {
+                    html += `
+                        <div class="result-merchant-section merchant2">
+                            <div class="merchant-header">
+                                <div class="merchant-badge merchant2-badge"></div>
+                                <h4>Merchant_two Results (${data.results.merchant2.length})</h4>
+                            </div>
+                            <div class="result-table-container">
+                                ${generateTable(data.results.merchant2)}
+                            </div>
                         </div>
-                        <div class="result-table-container">
-                            ${generateTable(data.results.merchant2)}
-                        </div>
-                    </div>
-                `;
+                    `;
+                }
             }
 
             html += '</div>';
@@ -1240,7 +1256,8 @@
 
             // No results
             if ((!data.results.merchant1 || data.results.merchant1.length === 0) && 
-                (!data.results.merchant2 || data.results.merchant2.length === 0)) {
+                (!data.results.merchant2 || data.results.merchant2.length === 0) &&
+                (!data.results.combined || data.results.combined.length === 0)) {
                 html += `
                     <div class="no-results">
                         <i class="fas fa-inbox" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 16px;"></i>
@@ -1258,11 +1275,11 @@
             }
         }
 
-        function generateTable(data) {
+        function generateTable(data, isCombined = false) {
             if (!data || data.length === 0) return '<p>No data</p>';
 
-            const hasSource = data.some(row => row._source);
-            const keys = Object.keys(data[0]).filter(k => k !== '_source'); // Exclude internal fields
+            const hasSource = isCombined || data.some(row => row._source || row.merchant_source);
+            const keys = Object.keys(data[0]).filter(k => k !== '_source' && k !== 'merchant_source'); // Exclude internal fields
             let html = '<table><thead><tr>';
             
             // Add Source column header if data has source information
@@ -1281,7 +1298,7 @@
                 
                 // Add source badge if available
                 if (hasSource) {
-                    const source = row._source || 'Unknown';
+                    const source = row.merchant_source || row._source || 'Unknown';
                     const badgeClass = source === 'Merchant_one' ? 'merchant1-badge' : 'merchant2-badge';
                     html += `<td><span class="source-badge ${badgeClass}">${source}</span></td>`;
                 }
@@ -1289,9 +1306,9 @@
                 keys.forEach(key => {
                     let value = row[key];
                     
-                    // Handle null/undefined values
-                    if (value === null || value === undefined) {
-                        html += `<td class="null-value">-</td>`;
+                    // Handle null/undefined/'N/A' values
+                    if (value === null || value === undefined || value === 'N/A' || value === '') {
+                        html += `<td class="null-value">N/A</td>`;
                         return;
                     }
                     
@@ -1303,7 +1320,7 @@
                             key.toLowerCase().includes('expenses') || key.toLowerCase().includes('total') ||
                             key.toLowerCase().includes('sales') || key.toLowerCase().includes('contribution') ||
                             key.toLowerCase().includes('combined') || key.toLowerCase().includes('average') ||
-                            key.toLowerCase().includes('margin')) {
+                            key.toLowerCase().includes('margin') || key.toLowerCase().includes('earnings')) {
                             value = '$' + numValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                         } else {
                             value = numValue.toLocaleString();

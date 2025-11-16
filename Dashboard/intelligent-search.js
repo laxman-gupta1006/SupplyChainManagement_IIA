@@ -391,8 +391,10 @@ class UniversalIntelligentSearch {
         const results = [];
         
         try {
-            const termSoundex = natural.SoundEx(term);
-            const termMetaphone = natural.Metaphone(term);
+            const soundex = new natural.SoundEx();
+            const metaphone = new natural.Metaphone();
+            const termSoundex = soundex.process(term);
+            const termMetaphone = metaphone.process(term);
             
             // Search through content cache for phonetic matches
             for (const [groupName, fuseIndex] of this.contentCache.entries()) {
@@ -401,8 +403,8 @@ class UniversalIntelligentSearch {
                 const docs = fuseIndex._docs || [];
                 docs.forEach(item => {
                     try {
-                        const valueSoundex = natural.SoundEx(item.value);
-                        const valueMetaphone = natural.Metaphone(item.value);
+                        const valueSoundex = soundex.process(item.value);
+                        const valueMetaphone = metaphone.process(item.value);
                         
                         if (termSoundex === valueSoundex || termMetaphone === valueMetaphone) {
                             results.push({
@@ -449,13 +451,15 @@ class UniversalIntelligentSearch {
             similarities.jaroWinkler = jaroWinkler(term1, term2);
             
             // Soundex match - correct API usage
-            const soundex1 = natural.SoundEx(term1);
-            const soundex2 = natural.SoundEx(term2);
+            const soundex = new natural.SoundEx();
+            const soundex1 = soundex.process(term1);
+            const soundex2 = soundex.process(term2);
             similarities.soundex = soundex1 === soundex2 ? 1 : 0;
             
             // Metaphone match - correct API usage
-            const metaphone1 = natural.Metaphone(term1);
-            const metaphone2 = natural.Metaphone(term2);
+            const metaphone = new natural.Metaphone();
+            const metaphone1 = metaphone.process(term1);
+            const metaphone2 = metaphone.process(term2);
             similarities.metaphone = metaphone1 === metaphone2 ? 1 : 0;
             
         } catch (err) {

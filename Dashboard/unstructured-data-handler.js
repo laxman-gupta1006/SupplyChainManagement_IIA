@@ -363,9 +363,11 @@ Based on this unstructured data, provide:
 
 Format your response as a clear, structured analysis.`;
 
-            const result = await genAIModel.generateContent(prompt);
-            const response = await result.response;
-            const analysis = response.text();
+            const result = await genAIModel.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt
+            });
+            const analysis = result.text;
             
             return {
                 success: true,

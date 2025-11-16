@@ -3,7 +3,7 @@ const { Pool } = require('pg');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 const UniversalIntelligentSearch = require('./intelligent-search');
 const DynamicSchemaManager = require('./dynamic-schema-manager');
 const UnstructuredDataHandler = require('./unstructured-data-handler');
@@ -21,9 +21,30 @@ const intelligentSearch = new UniversalIntelligentSearch();
 // Initialize Unstructured Data Handler (THIRD DATA SOURCE)
 const unstructuredData = new UnstructuredDataHandler();
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+// API Key Rotation System for handling quota limits
+const apiKeys = [
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY_4,
+    process.env.GEMINI_API_KEY_5
+].filter(key => key); // Remove undefined keys
+
+let currentKeyIndex = 0;
+let ai = null;
+
+function getNextApiKey() {
+    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+    console.log(`🔄 Rotating to API key ${currentKeyIndex + 1}/${apiKeys.length}`);
+    return apiKeys[currentKeyIndex];
+}
+
+function initializeAI() {
+    ai = new GoogleGenAI({ apiKey: apiKeys[currentKeyIndex] });
+}
+
+// Initialize AI with first key
+initializeAI();
 
 // Global dynamic schema context (will be updated automatically)
 let dynamicSchemaContext = 'Schema loading...';
@@ -166,16 +187,33 @@ When generating queries:
    - For unstructured data (reviews, feedback, sentiments, social media) → Set query_unstructured: true
    - Can query both structured AND unstructured data together
 
-2. Generate valid PostgreSQL SQL queries for databases
-3. Return a JSON object with this exact structure:
+2. 🎯 IMPORTANT - FOR COMBINED QUERIES (target: "both"):
+   When querying BOTH merchants for the same type of data, generate a UNIFIED QUERY that:
+   - Uses UNION ALL to combine results from both merchants
+   - Adds a 'merchant_source' column to identify which merchant each row comes from
+   - Normalizes column names so both merchants have the SAME column names in results
+   - Example SQL structure (for products from both merchants):
+     * SELECT item_id AS product_id, product_category AS category, brand_name, total_earnings AS revenue, 'Merchant_one' AS merchant_source FROM product_catalog
+     * UNION ALL
+     * SELECT product_id, category, 'N/A' AS brand_name, sales_revenue AS revenue, 'Merchant_two' AS merchant_source FROM products
+     * ORDER BY revenue DESC
+   - However, since we execute queries separately on each database:
+     * Put the Merchant_one SELECT part (without UNION) in merchant1_query
+     * Put the Merchant_two SELECT part (without UNION) in merchant2_query
+     * Set use_unified_query: true (system will combine results automatically)
+   - For columns that don't exist in one merchant, use 'N/A' or NULL as placeholder
+
+3. Generate valid PostgreSQL SQL queries for databases
+4. Return a JSON object with this exact structure:
 {
   "target": "merchant1" OR "merchant2" OR "both",
-  "merchant1_query": "SQL query for Merchant_one (or null if not needed)",
-  "merchant2_query": "SQL query for Merchant_two (or null if not needed)",
+  "merchant1_query": "SQL query for Merchant_one (SELECT with normalized columns for combining)",
+  "merchant2_query": "SQL query for Merchant_two (SELECT with normalized columns for combining)",
+  "use_unified_query": true/false (true if both queries should be combined with matching columns),
   "query_unstructured": true/false (true if unstructured data needed),
   "unstructured_keywords": "keywords to search in unstructured data (if query_unstructured is true)",
   "explanation": "Brief explanation of what the queries will return",
-  "aggregation_needed": true/false (true if results from multiple sources need to be combined)
+  "aggregation_needed": true/false (true if results from multiple sources need to be combined - set to FALSE when use_unified_query is true)
 }
 
 4. Only generate SELECT queries (no INSERT, UPDATE, DELETE for safety)
@@ -225,33 +263,90 @@ app.get('/', (req, res) => {
     res.render('index');
 });
 
-// API: Get combined statistics from both databases
+// API: Get combined statistics from both databases (dynamic schema detection)
 app.get('/api/stats', async (req, res) => {
     try {
-        // Merchant_one stats
-        const m1Products = await merchant1Pool.query('SELECT COUNT(*) as count FROM products_sales');
-        const m1Revenue = await merchant1Pool.query('SELECT SUM(revenue_generated) as total FROM products_sales');
-        const m1AvgPrice = await merchant1Pool.query('SELECT AVG(price) as avg FROM products_sales');
-        const m1Types = await merchant1Pool.query('SELECT DISTINCT product_type FROM products_sales');
+        // Get dynamic schema information
+        const merchant1Schema = schemaManager.getSchema('merchant1');
+        const merchant2Schema = schemaManager.getSchema('merchant2');
 
-        // Merchant_two stats
-        const m2Products = await merchant2Pool.query('SELECT COUNT(*) as count FROM products');
-        const m2Revenue = await merchant2Pool.query('SELECT SUM(sales_revenue) as total FROM products');
-        const m2AvgPrice = await merchant2Pool.query('SELECT AVG(unit_price) as avg FROM products');
-        const m2Categories = await merchant2Pool.query('SELECT DISTINCT category FROM products');
+        if (!merchant1Schema || !merchant2Schema || !merchant1Schema.tables || !merchant2Schema.tables) {
+            throw new Error('Schema information not yet available. Please wait for initialization.');
+        }
+
+        // Get table names as arrays
+        const m1TableNames = Object.keys(merchant1Schema.tables);
+        const m2TableNames = Object.keys(merchant2Schema.tables);
+
+        // Find product table for Merchant_one (could be products_sales or product_catalog)
+        const m1ProductTableName = m1TableNames.find(name => 
+            name.includes('product') && !name.includes('vendor') && !name.includes('supply')
+        );
+        
+        // Find product table for Merchant_two
+        const m2ProductTableName = m2TableNames.find(name => 
+            name.includes('product') && !name.includes('vendor') && !name.includes('supply')
+        );
+
+        if (!m1ProductTableName || !m2ProductTableName) {
+            throw new Error('Could not detect product tables in database schemas');
+        }
+
+        const m1ProductTable = merchant1Schema.tables[m1ProductTableName];
+        const m2ProductTable = merchant2Schema.tables[m2ProductTableName];
+
+        // Dynamically detect column names for Merchant_one
+        const m1RevenueCol = m1ProductTable.columns.find(c => 
+            c.name.includes('revenue') || c.name.includes('earnings') || c.name.includes('total')
+        )?.name || 'revenue_generated';
+        
+        const m1PriceCol = m1ProductTable.columns.find(c => 
+            c.name.includes('price') || c.name.includes('cost')
+        )?.name || 'price';
+        
+        const m1CategoryCol = m1ProductTable.columns.find(c => 
+            c.name.includes('type') || c.name.includes('category')
+        )?.name || 'product_type';
+
+        // Dynamically detect column names for Merchant_two
+        const m2RevenueCol = m2ProductTable.columns.find(c => 
+            c.name.includes('revenue') || c.name.includes('earnings')
+        )?.name || 'sales_revenue';
+        
+        const m2PriceCol = m2ProductTable.columns.find(c => 
+            c.name.includes('price') || c.name.includes('cost')
+        )?.name || 'unit_price';
+        
+        const m2CategoryCol = m2ProductTable.columns.find(c => 
+            c.name.includes('category') || c.name.includes('type')
+        )?.name || 'category';
+
+        // Execute dynamic queries for Merchant_one
+        const m1Products = await merchant1Pool.query(`SELECT COUNT(*) as count FROM ${m1ProductTableName}`);
+        const m1Revenue = await merchant1Pool.query(`SELECT SUM(${m1RevenueCol}) as total FROM ${m1ProductTableName}`);
+        const m1AvgPrice = await merchant1Pool.query(`SELECT AVG(${m1PriceCol}) as avg FROM ${m1ProductTableName}`);
+        const m1Types = await merchant1Pool.query(`SELECT DISTINCT ${m1CategoryCol} FROM ${m1ProductTableName} WHERE ${m1CategoryCol} IS NOT NULL`);
+
+        // Execute dynamic queries for Merchant_two
+        const m2Products = await merchant2Pool.query(`SELECT COUNT(*) as count FROM ${m2ProductTableName}`);
+        const m2Revenue = await merchant2Pool.query(`SELECT SUM(${m2RevenueCol}) as total FROM ${m2ProductTableName}`);
+        const m2AvgPrice = await merchant2Pool.query(`SELECT AVG(${m2PriceCol}) as avg FROM ${m2ProductTableName}`);
+        const m2Categories = await merchant2Pool.query(`SELECT DISTINCT ${m2CategoryCol} FROM ${m2ProductTableName} WHERE ${m2CategoryCol} IS NOT NULL`);
 
         const stats = {
             merchant1: {
                 totalProducts: parseInt(m1Products.rows[0].count) || 0,
                 totalRevenue: parseFloat(m1Revenue.rows[0].total) || 0,
                 avgPrice: parseFloat(m1AvgPrice.rows[0].avg) || 0,
-                productTypes: m1Types.rows.length
+                productTypes: m1Types.rows.length,
+                tableName: m1ProductTableName
             },
             merchant2: {
                 totalProducts: parseInt(m2Products.rows[0].count) || 0,
                 totalRevenue: parseFloat(m2Revenue.rows[0].total) || 0,
                 avgPrice: parseFloat(m2AvgPrice.rows[0].avg) || 0,
-                productTypes: m2Categories.rows.length
+                productTypes: m2Categories.rows.length,
+                tableName: m2ProductTableName
             },
             combined: {
                 totalProducts: (parseInt(m1Products.rows[0].count) || 0) + (parseInt(m2Products.rows[0].count) || 0),
@@ -277,13 +372,13 @@ app.post('/api/query', async (req, res) => {
             return res.status(400).json({ error: 'Question is required' });
         }
 
-        if (!process.env.GEMINI_API_KEY) {
+        if (apiKeys.length === 0) {
             return res.status(500).json({ 
-                error: 'Gemini API key not configured. Please add GEMINI_API_KEY to your .env file.' 
+                error: 'No Gemini API keys configured. Please add GEMINI_API_KEY_1 through GEMINI_API_KEY_5 to your .env file.' 
             });
         }
 
-        console.log(`🔍 Processing query: "${question}"`);
+        console.log(`🔍 Processing query: "${question}" [Using API key ${currentKeyIndex + 1}/${apiKeys.length}]`);
 
         // 🧠 INTELLIGENT SEARCH PREPROCESSING
         console.log('🧠 Analyzing query with intelligent search...');
@@ -315,9 +410,39 @@ Generate SQL with ILIKE patterns that capture these variations:`;
         // Use Gemini to convert natural language to SQL with intelligent context
         const prompt = `${getCurrentSchemaContext()}${intelligentContext}\n\nUser Question: "${question}"\n\nGenerate the appropriate SQL query/queries as JSON:`;
         
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        let aiResponse = response.text();
+        let result, aiResponse;
+        let retries = 0;
+        const maxRetries = apiKeys.length;
+
+        while (retries < maxRetries) {
+            try {
+                result = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt
+                });
+                aiResponse = result.text;
+                break; // Success, exit retry loop
+            } catch (error) {
+                console.error(`❌ API Error with key ${currentKeyIndex + 1}:`, error.message);
+                
+                // Check if it's a 429 rate limit error
+                if (error.message && (error.message.includes('429') || error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED'))) {
+                    retries++;
+                    if (retries < maxRetries) {
+                        console.log(`⚠️ Rate limit hit, rotating to next API key (attempt ${retries + 1}/${maxRetries})`);
+                        getNextApiKey();
+                        initializeAI();
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+                    } else {
+                        console.error('❌ All API keys exhausted, quota limits reached');
+                        throw new Error('All API keys have exceeded their quota limits. Please wait for quota reset or upgrade to a paid tier.');
+                    }
+                } else {
+                    // Non-quota error, throw immediately
+                    throw error;
+                }
+            }
+        }
 
         // Clean up the response (remove markdown code blocks if present)
         aiResponse = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -330,19 +455,54 @@ Generate SQL with ILIKE patterns that capture these variations:`;
         let merchant1Results = null;
         let merchant2Results = null;
         let unstructuredResults = null;
+        let combinedResults = null;
 
-        // Query structured databases
-        if (queryPlan.target === 'merchant1' || queryPlan.target === 'both') {
+        // 🎯 Handle unified queries (UNION queries that combine both merchants)
+        if (queryPlan.use_unified_query && queryPlan.target === 'both') {
+            console.log('🔗 Executing UNIFIED query (combines both merchants with UNION)');
+            
+            // For unified queries, we need to execute on both databases
+            // The query should be designed to work on each database individually
+            // and the UNION will be handled by executing the appropriate parts
+            
             if (queryPlan.merchant1_query) {
-                console.log('📊 Executing Merchant_one query:', queryPlan.merchant1_query);
+                console.log('📊 Executing Merchant_one part of unified query');
                 merchant1Results = await executeMultipleQueries(merchant1Pool, queryPlan.merchant1_query);
+                console.log(`   ✅ Got ${merchant1Results?.length || 0} results from Merchant_one`);
             }
-        }
-
-        if (queryPlan.target === 'merchant2' || queryPlan.target === 'both') {
+            
             if (queryPlan.merchant2_query) {
-                console.log('📊 Executing Merchant_two query:', queryPlan.merchant2_query);
+                console.log('📊 Executing Merchant_two part of unified query');
                 merchant2Results = await executeMultipleQueries(merchant2Pool, queryPlan.merchant2_query);
+                console.log(`   ✅ Got ${merchant2Results?.length || 0} results from Merchant_two`);
+            }
+            
+            // Combine results
+            combinedResults = [];
+            if (merchant1Results && merchant1Results.length > 0) {
+                combinedResults = combinedResults.concat(merchant1Results);
+            }
+            if (merchant2Results && merchant2Results.length > 0) {
+                combinedResults = combinedResults.concat(merchant2Results);
+            }
+            
+            console.log(`🎉 Combined results: ${combinedResults.length} total rows`);
+            
+        } else {
+            // Original separate query logic
+            // Query structured databases
+            if (queryPlan.target === 'merchant1' || queryPlan.target === 'both') {
+                if (queryPlan.merchant1_query) {
+                    console.log('📊 Executing Merchant_one query:', queryPlan.merchant1_query);
+                    merchant1Results = await executeMultipleQueries(merchant1Pool, queryPlan.merchant1_query);
+                }
+            }
+
+            if (queryPlan.target === 'merchant2' || queryPlan.target === 'both') {
+                if (queryPlan.merchant2_query) {
+                    console.log('📊 Executing Merchant_two query:', queryPlan.merchant2_query);
+                    merchant2Results = await executeMultipleQueries(merchant2Pool, queryPlan.merchant2_query);
+                }
             }
         }
 
@@ -350,7 +510,7 @@ Generate SQL with ILIKE patterns that capture these variations:`;
         if (queryPlan.query_unstructured) {
             console.log('📄 Querying unstructured data with keywords:', queryPlan.unstructured_keywords || question);
             const unstructuredQuery = queryPlan.unstructured_keywords || question;
-            unstructuredResults = await unstructuredData.queryWithLLM(unstructuredQuery, model);
+            unstructuredResults = await unstructuredData.queryWithLLM(unstructuredQuery, ai);
         }
 
         // Prepare response
@@ -359,6 +519,7 @@ Generate SQL with ILIKE patterns that capture these variations:`;
             question: question,
             target: queryPlan.target,
             explanation: queryPlan.explanation,
+            use_unified_query: queryPlan.use_unified_query || false,
             queries: {
                 merchant1: queryPlan.merchant1_query,
                 merchant2: queryPlan.merchant2_query
@@ -366,6 +527,7 @@ Generate SQL with ILIKE patterns that capture these variations:`;
             results: {
                 merchant1: merchant1Results,
                 merchant2: merchant2Results,
+                combined: combinedResults, // NEW: Combined results from unified query
                 unstructured: unstructuredResults ? {
                     analysis: unstructuredResults.analysis,
                     entriesAnalyzed: unstructuredResults.dataEntriesAnalyzed,
@@ -443,8 +605,89 @@ async function executeMultipleQueries(pool, queryString) {
     return combinedResults;
 }
 
+// AI-powered intelligent column mapping
+async function intelligentColumnMapping(merchant1Columns, merchant2Columns, sampleM1Data, sampleM2Data) {
+    try {
+        // If columns are identical, no mapping needed
+        if (JSON.stringify(merchant1Columns.sort()) === JSON.stringify(merchant2Columns.sort())) {
+            return {};
+        }
+
+        const prompt = `You are a database schema mapper. Analyze these two column sets from different merchants and create a mapping.
+
+Merchant_one Columns: ${merchant1Columns.join(', ')}
+Sample Merchant_one Data: ${JSON.stringify(sampleM1Data || {})}
+
+Merchant_two Columns: ${merchant2Columns.join(', ')}
+Sample Merchant_two Data: ${JSON.stringify(sampleM2Data || {})}
+
+Task: Map each Merchant_two column to its semantically equivalent Merchant_one column. Consider:
+- Columns with similar meanings (e.g., 'product_id' = 'item_id', 'quality_score' = 'quality_rating')
+- Data types and sample values
+- Common naming patterns (e.g., snake_case variations)
+
+Return ONLY a JSON object mapping Merchant_two columns to Merchant_one columns. Format:
+{
+  "merchant2_column": "merchant1_column",
+  ...
+}
+
+Only include columns that have clear semantic matches. Omit columns that don't map.`;
+
+        const result = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt
+        });
+        
+        let mappingText = result.text.trim();
+        
+        // Clean up response
+        mappingText = mappingText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        
+        const mapping = JSON.parse(mappingText);
+        console.log('🔗 AI-generated column mapping:', mapping);
+        
+        return mapping;
+        
+    } catch (err) {
+        console.error('❌ Error in intelligent column mapping, using fallback:', err.message);
+        
+        // Fallback: Simple string similarity matching
+        const mapping = {};
+        merchant2Columns.forEach(m2Col => {
+            const lowerM2 = m2Col.toLowerCase().replace(/_/g, '');
+            let bestMatch = null;
+            let bestScore = 0;
+            
+            merchant1Columns.forEach(m1Col => {
+                const lowerM1 = m1Col.toLowerCase().replace(/_/g, '');
+                
+                // Calculate similarity score (simple approach)
+                const commonChars = [...lowerM1].filter(char => lowerM2.includes(char)).length;
+                const score = commonChars / Math.max(lowerM1.length, lowerM2.length);
+                
+                if (score > bestScore && score > 0.5) {
+                    bestScore = score;
+                    bestMatch = m1Col;
+                }
+            });
+            
+            if (bestMatch) {
+                mapping[m2Col] = bestMatch;
+            }
+        });
+        
+        console.log('🔗 Fallback column mapping:', mapping);
+        return mapping;
+    }
+}
+
 // Helper function to perform intelligent aggregation
 function performAggregation(m1Data, m2Data, question) {
+    return performAggregationAsync(m1Data, m2Data, question);
+}
+
+async function performAggregationAsync(m1Data, m2Data, question) {
     const lowerQuestion = question.toLowerCase();
     
     // Check if this is a single-value aggregation query (SUM, AVG, COUNT, etc.)
@@ -507,41 +750,21 @@ function performAggregation(m1Data, m2Data, question) {
     
     // For multi-row results (list queries)
     if (m1Data.length > 0 || m2Data.length > 0) {
-        // Define column mappings for normalization
-        const columnMappings = {
-            'sku': 'product_id',
-            'product_type': 'category',
-            'price': 'unit_price',
-            'number_of_products_sold': 'units_sold',
-            'revenue_generated': 'sales_revenue',
-            'supplier_name': 'vendor_name',
-            'location': 'facility_location',
-            'costs': 'freight_charges',
-            'lead_time': 'processing_days',
-            'production_volumes': 'output_quantity',
-            'manufacturing_costs': 'production_expenses',
-            'shipping_carriers': 'logistics_provider',
-            'transportation_modes': 'shipping_method'
-        };
+        // Get column names from both datasets
+        const m1Columns = m1Data.length > 0 ? Object.keys(m1Data[0]) : [];
+        const m2Columns = m2Data.length > 0 ? Object.keys(m2Data[0]) : [];
         
-        // Create reverse mapping
-        const reverseMapping = {};
-        Object.entries(columnMappings).forEach(([m1Col, m2Col]) => {
-            reverseMapping[m2Col] = m1Col;
-        });
+        // Use AI to intelligently map columns between merchants
+        const columnMapping = await intelligentColumnMapping(m1Columns, m2Columns, m1Data[0], m2Data[0]);
         
-        // Function to normalize a row's column names to a standard format
+        // Function to normalize a row's column names based on AI mapping
         function normalizeRow(row, source) {
             const normalized = {};
             Object.entries(row).forEach(([key, value]) => {
-                // Use the Merchant_one column name as the standard
-                let standardKey = key;
-                
-                if (source === 'Merchant_two' && reverseMapping[key]) {
-                    standardKey = reverseMapping[key];
-                } else if (source === 'Merchant_one' && columnMappings[key]) {
-                    standardKey = key; // Already standard
-                }
+                // Use the mapped standard column name
+                const standardKey = source === 'Merchant_two' && columnMapping[key] 
+                    ? columnMapping[key] 
+                    : key;
                 
                 normalized[standardKey] = value;
             });
@@ -692,9 +915,40 @@ Example good insights:
 
 Your insight:`;
 
-        const result = await model.generateContent(insightPrompt);
-        const response = await result.response;
-        let insight = response.text().trim();
+        let result, insight;
+        let retries = 0;
+        const maxRetries = apiKeys.length;
+
+        while (retries < maxRetries) {
+            try {
+                result = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: insightPrompt
+                });
+                insight = result.text.trim();
+                break; // Success, exit retry loop
+            } catch (error) {
+                console.error(`❌ Insight generation error with key ${currentKeyIndex + 1}:`, error.message);
+                
+                // Check if it's a 429 rate limit error
+                if (error.message && (error.message.includes('429') || error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED'))) {
+                    retries++;
+                    if (retries < maxRetries) {
+                        console.log(`⚠️ Rate limit hit, rotating to next API key (attempt ${retries + 1}/${maxRetries})`);
+                        getNextApiKey();
+                        initializeAI();
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+                    } else {
+                        console.error('❌ All API keys exhausted during insight generation');
+                        return null; // Fail gracefully
+                    }
+                } else {
+                    // Non-quota error, return null gracefully
+                    console.error('❌ Non-quota error during insight generation:', error.message);
+                    return null;
+                }
+            }
+        }
 
         // Clean up any markdown formatting
         insight = insight.replace(/```/g, '').replace(/\*\*/g, '').trim();
@@ -925,7 +1179,7 @@ app.post('/api/query-unstructured', async (req, res) => {
     try {
         console.log(`🔍 Querying unstructured data: "${question}"`);
         
-        const result = await unstructuredData.queryWithLLM(question, model);
+        const result = await unstructuredData.queryWithLLM(question, ai);
         
         res.json({
             success: result.success,
@@ -1125,7 +1379,7 @@ app.listen(PORT, () => {
 ║   2️⃣  PostgreSQL: merchant_two_supply_chain (Merchant_two) ║
 ║   3️⃣  Unstructured: Text Data (Reviews, Tickets, Social)  ║
 ║                                                            ║
-║   🤖 Gemini AI: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not Configured'}                    ║
+║   🤖 Gemini AI: ${apiKeys.length > 0 ? `✅ ${apiKeys.length} API Keys Configured (Rotation Enabled)` : '❌ Not Configured'}    ║
 ║   📊 Federated Query System: Ready                         ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
