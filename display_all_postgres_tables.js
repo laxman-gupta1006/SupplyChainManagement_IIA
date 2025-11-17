@@ -11,14 +11,41 @@
  */
 
 const { Pool } = require('pg');
+const path = require('path');
+const fs = require('fs');
 
-// PostgreSQL connection configuration
-const config = {
-    user: 'vatsaly',
-    host: 'localhost',
-    password: '', // No password needed (trust authentication)
-    port: 5432,
-};
+// Load environment variables from Dashboard/.env
+const envPath = path.join(__dirname, 'Dashboard', '.env');
+if (fs.existsSync(envPath)) {
+    require('dotenv').config({ path: envPath });
+} else {
+    console.error('Error: Dashboard/.env file not found');
+    process.exit(1);
+}
+
+// Database configurations from .env
+const databases = [
+    {
+        name: 'Merchant_one',
+        config: {
+            user: process.env.MERCHANT1_USER,
+            host: process.env.MERCHANT1_HOST,
+            database: process.env.MERCHANT1_DB,
+            password: process.env.MERCHANT1_PASSWORD,
+            port: process.env.MERCHANT1_PORT || 5432,
+        }
+    },
+    {
+        name: 'Merchant_two',
+        config: {
+            user: process.env.MERCHANT2_USER,
+            host: process.env.MERCHANT2_HOST,
+            database: process.env.MERCHANT2_DB,
+            password: process.env.MERCHANT2_PASSWORD,
+            port: process.env.MERCHANT2_PORT || 5432,
+        }
+    }
+];
 
 // Color codes for terminal output
 const colors = {
@@ -58,9 +85,7 @@ async function getAllDatabases() {
 /**
  * Get all tables in a database
  */
-async function getTablesInDatabase(dbName) {
-    const pool = new Pool({ ...config, database: dbName });
-    
+async function getTablesInDatabase(pool) {
     try {
         const result = await pool.query(`
             SELECT 
@@ -73,19 +98,15 @@ async function getTablesInDatabase(dbName) {
         
         return result.rows;
     } catch (error) {
-        console.error(`Error fetching tables from ${dbName}:`, error.message);
+        console.error(`Error fetching tables:`, error.message);
         return [];
-    } finally {
-        await pool.end();
     }
 }
 
 /**
  * Get row count for a table
  */
-async function getRowCount(dbName, schemaName, tableName) {
-    const pool = new Pool({ ...config, database: dbName });
-    
+async function getRowCount(pool, schemaName, tableName) {
     try {
         const result = await pool.query(`
             SELECT COUNT(*) as count 
@@ -96,17 +117,13 @@ async function getRowCount(dbName, schemaName, tableName) {
     } catch (error) {
         console.error(`Error counting rows in ${tableName}:`, error.message);
         return 0;
-    } finally {
-        await pool.end();
     }
 }
 
 /**
  * Get columns for a table
  */
-async function getTableColumns(dbName, schemaName, tableName) {
-    const pool = new Pool({ ...config, database: dbName });
-    
+async function getTableColumns(pool, schemaName, tableName) {
     try {
         const result = await pool.query(`
             SELECT 
@@ -124,8 +141,6 @@ async function getTableColumns(dbName, schemaName, tableName) {
     } catch (error) {
         console.error(`Error fetching columns for ${tableName}:`, error.message);
         return [];
-    } finally {
-        await pool.end();
     }
 }
 
@@ -135,7 +150,7 @@ async function getTableColumns(dbName, schemaName, tableName) {
 function displayHeader() {
     console.log('\n' + '='.repeat(80));
     console.log(`${colors.bright}${colors.cyan}PostgreSQL Database Explorer${colors.reset}`);
-    console.log(`${colors.yellow}Host: localhost:5432 | User: vatsaly${colors.reset}`);
+    console.log(`${colors.yellow}Reading configuration from Dashboard/.env${colors.reset}`);
     console.log('='.repeat(80) + '\n');
 }
 
@@ -145,62 +160,72 @@ function displayHeader() {
 async function displayAllTables(showColumns = false) {
     displayHeader();
     
-    // Get all databases
-    const databases = await getAllDatabases();
-    
-    if (databases.length === 0) {
-        console.log('No databases found.');
-        return;
-    }
-    
-    console.log(`${colors.bright}Found ${databases.length} database(s)${colors.reset}\n`);
+    console.log(`${colors.bright}Found ${databases.length} database(s) configured${colors.reset}\n`);
     
     let totalTables = 0;
     let totalRows = 0;
     
-    // Iterate through each database
-    for (const dbName of databases) {
-        console.log(`${colors.bright}${colors.blue}📁 Database: ${dbName}${colors.reset}`);
+    // Iterate through each database configuration
+    for (const dbConfig of databases) {
+        const { name, config } = dbConfig;
+        
+        console.log(`${colors.bright}${colors.blue}📁 ${name}: ${config.database}${colors.reset}`);
+        console.log(`   Host: ${config.host}:${config.port} | User: ${config.user}`);
         console.log('─'.repeat(80));
         
-        const tables = await getTablesInDatabase(dbName);
-        
-        if (tables.length === 0) {
-            console.log(`  ${colors.yellow}No tables found${colors.reset}\n`);
-            continue;
-        }
-        
-        // Iterate through each table
-        for (const table of tables) {
-            const { schemaname, tablename } = table;
-            const rowCount = await getRowCount(dbName, schemaname, tablename);
+        let pool;
+        try {
+            pool = new Pool(config);
             
-            totalTables++;
-            totalRows += rowCount;
+            // Test connection
+            await pool.query('SELECT 1');
             
-            console.log(`\n  ${colors.green}📊 Table: ${schemaname}.${tablename}${colors.reset}`);
-            console.log(`     Rows: ${colors.magenta}${rowCount.toLocaleString()}${colors.reset}`);
+            const tables = await getTablesInDatabase(pool);
             
-            // Show columns if requested
-            if (showColumns) {
-                const columns = await getTableColumns(dbName, schemaname, tablename);
-                console.log(`     Columns: ${colors.cyan}${columns.length}${colors.reset}`);
-                console.log('     ┌─────────────────────────────────────────────────────');
+            if (tables.length === 0) {
+                console.log(`  ${colors.yellow}No tables found${colors.reset}\n`);
+                continue;
+            }
+            
+            // Iterate through each table
+            for (const table of tables) {
+                const { schemaname, tablename } = table;
+                const rowCount = await getRowCount(pool, schemaname, tablename);
                 
-                columns.forEach((col, index) => {
-                    const prefix = index === columns.length - 1 ? '└──' : '├──';
-                    const type = col.character_maximum_length 
-                        ? `${col.data_type}(${col.character_maximum_length})`
-                        : col.data_type;
-                    const nullable = col.is_nullable === 'YES' ? 'NULL' : 'NOT NULL';
+                totalTables++;
+                totalRows += rowCount;
+                
+                console.log(`\n  ${colors.green}📊 Table: ${schemaname}.${tablename}${colors.reset}`);
+                console.log(`     Rows: ${colors.magenta}${rowCount.toLocaleString()}${colors.reset}`);
+                
+                // Show columns if requested
+                if (showColumns) {
+                    const columns = await getTableColumns(pool, schemaname, tablename);
+                    console.log(`     Columns: ${colors.cyan}${columns.length}${colors.reset}`);
+                    console.log('     ┌─────────────────────────────────────────────────────');
                     
-                    console.log(`     ${prefix} ${col.column_name}: ${type} ${nullable}`);
-                });
+                    columns.forEach((col, index) => {
+                        const prefix = index === columns.length - 1 ? '└──' : '├──';
+                        const type = col.character_maximum_length 
+                            ? `${col.data_type}(${col.character_maximum_length})`
+                            : col.data_type;
+                        const nullable = col.is_nullable === 'YES' ? 'NULL' : 'NOT NULL';
+                        
+                        console.log(`     ${prefix} ${col.column_name}: ${type} ${nullable}`);
+                    });
+                }
+            }
+            
+            console.log(`\n  ${colors.bright}Total tables in ${name}: ${tables.length}${colors.reset}`);
+            console.log('─'.repeat(80) + '\n');
+            
+        } catch (error) {
+            console.log(`  ${colors.yellow}⚠️  Connection failed: ${error.message}${colors.reset}\n`);
+        } finally {
+            if (pool) {
+                await pool.end();
             }
         }
-        
-        console.log(`\n  ${colors.bright}Total tables in ${dbName}: ${tables.length}${colors.reset}`);
-        console.log('─'.repeat(80) + '\n');
     }
     
     // Display summary
@@ -260,4 +285,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { getAllDatabases, getTablesInDatabase, getRowCount, getTableColumns };
+module.exports = { getTablesInDatabase, getRowCount, getTableColumns };
