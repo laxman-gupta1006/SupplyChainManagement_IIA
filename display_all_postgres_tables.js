@@ -157,7 +157,7 @@ function displayHeader() {
 /**
  * Display all tables with details
  */
-async function displayAllTables(showColumns = false) {
+async function displayAllTables(showColumns = true) {
     displayHeader();
     
     console.log(`${colors.bright}Found ${databases.length} database(s) configured${colors.reset}\n`);
@@ -198,22 +198,20 @@ async function displayAllTables(showColumns = false) {
                 console.log(`\n  ${colors.green}📊 Table: ${schemaname}.${tablename}${colors.reset}`);
                 console.log(`     Rows: ${colors.magenta}${rowCount.toLocaleString()}${colors.reset}`);
                 
-                // Show columns if requested
-                if (showColumns) {
-                    const columns = await getTableColumns(pool, schemaname, tablename);
-                    console.log(`     Columns: ${colors.cyan}${columns.length}${colors.reset}`);
-                    console.log('     ┌─────────────────────────────────────────────────────');
+                // Always show columns with data types
+                const columns = await getTableColumns(pool, schemaname, tablename);
+                console.log(`     Columns: ${colors.cyan}${columns.length}${colors.reset}`);
+                console.log('     ┌─────────────────────────────────────────────────────');
+                
+                columns.forEach((col, index) => {
+                    const prefix = index === columns.length - 1 ? '└──' : '├──';
+                    const type = col.character_maximum_length 
+                        ? `${col.data_type}(${col.character_maximum_length})`
+                        : col.data_type;
+                    const nullable = col.is_nullable === 'YES' ? 'NULL' : 'NOT NULL';
                     
-                    columns.forEach((col, index) => {
-                        const prefix = index === columns.length - 1 ? '└──' : '├──';
-                        const type = col.character_maximum_length 
-                            ? `${col.data_type}(${col.character_maximum_length})`
-                            : col.data_type;
-                        const nullable = col.is_nullable === 'YES' ? 'NULL' : 'NOT NULL';
-                        
-                        console.log(`     ${prefix} ${col.column_name}: ${type} ${nullable}`);
-                    });
-                }
+                    console.log(`     ${prefix} ${col.column_name}: ${type} ${nullable}`);
+                });
             }
             
             console.log(`\n  ${colors.bright}Total tables in ${name}: ${tables.length}${colors.reset}`);
@@ -250,29 +248,8 @@ function displaySummary(dbCount, tableCount, rowCount) {
  */
 async function main() {
     try {
-        // Check command line arguments
-        const showColumns = process.argv.includes('--columns') || process.argv.includes('-c');
-        const helpFlag = process.argv.includes('--help') || process.argv.includes('-h');
-        
-        if (helpFlag) {
-            console.log(`
-${colors.bright}PostgreSQL Database Explorer${colors.reset}
-
-${colors.cyan}Usage:${colors.reset}
-  node display_all_postgres_tables.js [options]
-
-${colors.cyan}Options:${colors.reset}
-  --columns, -c    Show column details for each table
-  --help, -h       Show this help message
-
-${colors.cyan}Examples:${colors.reset}
-  node display_all_postgres_tables.js
-  node display_all_postgres_tables.js --columns
-            `);
-            return;
-        }
-        
-        await displayAllTables(showColumns);
+        // Always show columns with data types by default
+        await displayAllTables(true);
         
     } catch (error) {
         console.error(`${colors.bright}Error:${colors.reset}`, error.message);
